@@ -1178,15 +1178,20 @@ const creators = [
             <div
               style={{
                 position: "absolute",
-                left: "165px",
+                left: "50%",
+                transform: "translateX(-50%)",
                 top: "228px",
-                width: "108px",
+                minWidth: "160px",
+                padding: "6px 8px",
                 textAlign: "center",
-                color: "rgba(255,255,255,0.95)",
-                fontSize: 12,
-                fontWeight: 600,
-                zIndex: 3,
+                color: "#fff",
+                background: "rgba(0,0,0,0.6)",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                zIndex: 30,
                 userSelect: "none",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.45)",
               }}
             >
               部門、姓名、暱稱即帳號
