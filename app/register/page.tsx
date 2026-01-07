@@ -44,7 +44,7 @@ const loadCards = (): CardData[] => {
       const parsedDates: string[] = JSON.parse(storedJson);
       return defaultDateCards.map((defaultCard, i) => ({
         ...defaultCard,
-        date: parsedDates[i] || defaultCard.date, 
+        date: normalizeServerDateKey(parsedDates[i] || defaultCard.date), 
       }));
     } catch (e) {
       console.error("Failed to parse stored dates:", e);
@@ -241,18 +241,18 @@ export default function RegisterPage() {
     const handleDateChange = (index: number, newDate: string) => {
       // 先保存舊的日期值
       const oldDate = cards[index].date;
-      
-      setCards(prevCards => 
-        prevCards.map((card, i) => 
-          i === index ? { ...card, date: newDate } : card
-        )
-      );
+        const normalized = normalizeServerDateKey(newDate);
+        setCards(prevCards => 
+          prevCards.map((card, i) => 
+            i === index ? { ...card, date: normalized } : card
+          )
+        );
       setRegisteredDetails(prev => {
         const newDetails = { ...prev };
         // 如果這個日期原本就有報名資訊，改日期時一併把資料跟著搬到新日期
-        if (oldDate !== newDate && newDetails[oldDate]) {
-          newDetails[newDate] = newDetails[oldDate];
-          delete newDetails[oldDate];
+          if (oldDate !== normalized && newDetails[oldDate]) {
+            newDetails[normalized] = newDetails[oldDate];
+            delete newDetails[oldDate];
         }
         return newDetails;
       });
