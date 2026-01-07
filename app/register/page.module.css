@@ -1,0 +1,365 @@
+/* === 主容器樣式：負責全螢幕背景 === */
+.main {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-image: url('/game_15.png'); /* ❗ 請檢查/替換此處的圖片路徑 */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: #36281b; 
+}
+
+.container {
+  position: relative;           
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 40px; 
+  overflow: visible; 
+  padding: 0; 
+  margin: 0;
+  box-sizing: border-box;
+  transform: scale(0.95);
+  transform-origin: center;
+}
+
+
+/* 卡片基本樣式 */
+.card {
+  width: 300px;
+  height: 500px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0;
+  transform: translateX(200px);
+  transition: transform 0.8s ease-out, opacity 0.8s ease-out;
+  display: flex;
+  flex-direction: column; 
+  justify-content: space-between; 
+  align-items: center;
+  position: relative;
+  padding: 20px 0; 
+  cursor: pointer;
+}
+
+
+/* 滑入動畫 */
+.card.animateIn {
+  opacity: 1;
+  transform: translateX(0);
+  animation: shake 0.4s ease-in-out 0.9s;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+
+.dateOverlay {
+    position: relative; 
+    color: #fff;
+    font-family: "Press Start 2P", sans-serif;
+    font-size: 20px;
+    text-shadow: 2px 2px 4px #000;
+    margin-top: 30px;
+}
+
+.registerButton {
+    background-color: #ffd966;
+    border: 3px solid #b8860b;
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-family: "Press Start 2P", sans-serif;
+    color: #3b2200;
+    font-size: 12px;
+    cursor: pointer;
+    transition: transform 0.2s;
+    margin-bottom: 30px; 
+}
+
+.registerButton:hover:not([disabled]) {
+    transform: scale(1.1);
+}
+
+/* === 報名表單 Modal 樣式 === */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7); 
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000; 
+  /* 修正: 確保彈窗內預設文字顏色為深咖啡色 */
+  color: #3b2200; 
+}
+
+.form {
+  background: #f7e6c4;
+  border: 5px solid #6c4b2a;
+  border-radius: 15px;
+  padding: 30px 40px;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  min-width: 350px;
+}
+
+.form h3 {
+  text-align: center;
+  /* 修正: 將標題顏色改為深咖啡色 */
+  color: #3b2200; 
+  font-family: "Press Start 2P", sans-serif;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.form div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+}
+
+.form label {
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  /* 修正: 確保 Label 顏色是深咖啡色 */
+  color: #3b2200;
+  white-space: nowrap;
+}
+
+.form input {
+  padding: 8px;
+  border: 2px solid #b8860b;
+  border-radius: 6px;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  flex-grow: 1;
+  /* 修正: 將打字的字體顏色改為深咖啡色 */
+  color: #3b2200;
+}
+
+
+/* === 彈出視窗底部的按鈕區 === */
+.buttonRow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 40px; 
+  margin-top: 30px;
+}
+
+/* 按鈕樣式 */
+.modal button[type="submit"],
+.modal button[type="button"] {
+  background-color: #ffd966;
+  border: 3px solid #b8860b;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-family: "Press Start 2P", sans-serif;
+  font-size: 12px;
+  color: #3b2200;
+  cursor: pointer;
+  transition: transform 0.2s, background-color 0.2s;
+}
+
+/* hover 效果 */
+.modal button:not([disabled]):hover {
+  transform: scale(1.1);
+  background-color: #ffecb3;
+}
+
+/* === 固定在畫面最下方中央的『回首頁』按鈕 === */
+.homeBtnCalendar {
+  position: absolute; 
+       
+  left: 50%;                  
+  bottom: -60px;             
+  transform: translateX(-50%);
+  background-color: #fff6f66c;
+  border-radius: 10px;
+  border: 2px solid #ffffff;
+  font-family: "Press Start 2P", sans-serif;
+  font-size: 12px;
+  color: white;
+  padding: 10px 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 6;
+}
+
+.homeBtnCalendar:hover {
+    background-color: #558080;
+    transform: translateX(-50%) scale(1.05);
+}
+
+/* === 日期輸入框樣式 (在編輯模式下取代 .dateOverlay) === */
+.dateInput {
+    position: relative; 
+    width: 80%; 
+    max-width: 150px;
+    height: 40px;
+    margin-top: 30px;
+    background-color: #fffaf0; 
+    border: 2px solid #b8860b;
+    border-radius: 8px;
+    text-align: center;
+    font-family: "Press Start 2P", sans-serif;
+    font-size: 16px;
+    color: #3b2200;
+    z-index: 2; 
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+}
+
+
+/* === 編輯日期按鈕樣式 (放在畫面中間的上方) === */
+.editBtn {
+    position: absolute;
+    top: -50px; 
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #ffd373; 
+    border: 3px solid #af5c0d;
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-family: "Press Start 2P", sans-serif;
+    font-size: 12px;
+    color: #643636;
+    cursor: pointer;
+    transition: transform 0.2s, background-color 0.2s;
+    z-index: 5;
+    white-space: nowrap;
+}
+
+.editBtn:hover {
+    transform: translateX(-50%) scale(1.05);
+    background-color: #a0ffa0;
+}
+
+
+/* ---------------------------------- */
+/* 報名資訊顯示/編輯區塊樣式 */
+/* ---------------------------------- */
+
+/* 外部包裹層 (給予上下邊距和置中) */
+.registrationDetailsWrapper {
+    margin-top: 10px;
+    padding: 5px 0;
+    width: 85%;
+    align-self: center;
+    text-align: center;
+    z-index: 5; 
+}
+
+/* 顯示模式：姓名/部門同一行 (已修正為深咖啡色) */
+.registrationInfo {
+    display: flex; 
+    justify-content: center;
+    gap: 12px; 
+    padding: 5px 10px;
+    background: rgba(255, 255, 255, 0.2); 
+    border-radius: 4px;
+    color: #3b2200; /* ✅ 深咖啡色 */
+    text-shadow: none; /* 移除陰影 */
+    margin-bottom: 8px; 
+}
+
+/* 針對 span 元素設定樣式 */
+.registrationInfo span {
+    margin: 0; 
+    font-size: 10px;
+    font-family: "Press Start 2P", sans-serif; 
+    line-height: 1.4;
+    white-space: nowrap; 
+}
+
+/* 編輯模式的容器 (已修正為淺色背景和深色文字) */
+.registrationEdit {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px;
+    background: #f7e6c4; /* ✅ 淺黃色背景 */
+    color: #3b2200; /* ✅ 深咖啡色文字 */
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+/* 編輯模式的輸入框 (已修正為深色文字) */
+.editInput {
+    padding: 5px;
+    border: 1px solid #b8860b;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: Arial, sans-serif;
+    color: #3b2200; /* ✅ 深咖啡色文字 */
+}
+
+/* 編輯模式底下的按鈕排 */
+.editButtonRow {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 5px;
+}
+
+
+/* 操作按鈕 (編輯/刪除) 區塊 */
+.actionButtonRow {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 5px;
+}
+
+/* ---------------------------------- */
+/* 操作按鈕樣式 */
+/* ---------------------------------- */
+
+.actionBtn, .actionBtnDelete, .saveBtn, .cancelBtn {
+    /* 基礎按鈕樣式 */
+    font-family: "Press Start 2P", sans-serif;
+    font-size: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 2px solid;
+    transition: transform 0.1s;
+    white-space: nowrap;
+    line-height: 1; 
+}
+
+/* 編輯 / 儲存 按鈕 */
+.actionBtn, .saveBtn {
+    background-color: #ffd966;
+    border-color: #b8860b;
+    color: #3b2200;
+}
+
+/* 刪除 按鈕 */
+.actionBtnDelete {
+    background-color: #ffd966; 
+    border-color: #b8860b;
+    color: #3b2200;
+}
+
+/* 取消 按鈕 */
+.cancelBtn {
+    background-color: #ccc; 
+    border-color: #888;
+    color: #333;
+}
+
+.actionBtn:hover, .actionBtnDelete:hover, .saveBtn:hover, .cancelBtn:hover {
+    transform: scale(1.05);
+}
