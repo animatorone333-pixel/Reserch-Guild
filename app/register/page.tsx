@@ -112,16 +112,23 @@ export default function RegisterPage() {
   // normalize server date values (ISO date, localized string, or M/D) to card key format like "M/D"
   const normalizeServerDateKey = (raw: any) => {
     if (!raw) return "";
-    if (typeof raw === "string" && /^\d{1,2}\/\d{1,2}$/.test(raw.trim())) return raw.trim();
-    const asString = String(raw).trim();
-    const parsed = Date.parse(asString);
+    const s = String(raw).trim();
+    // match M/D or MM/DD like 01/05 or 1/5
+    const m = s.match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
+    if (m) {
+      const month = String(Number(m[1]));
+      const day = String(Number(m[2]));
+      return `${month}/${day}`;
+    }
+    const parsed = Date.parse(s);
     if (!isNaN(parsed)) {
       const d = new Date(parsed);
       const month = d.getMonth() + 1;
       const day = d.getDate();
       return `${month}/${day}`;
     }
-    return asString;
+    // fallback: return raw trimmed (will likely not match cards)
+    return s;
   };
 
 
