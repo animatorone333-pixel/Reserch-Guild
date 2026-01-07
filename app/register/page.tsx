@@ -110,16 +110,63 @@ export default function RegisterPage() {
   const [isClient, setIsClient] = useState(false); 
 
 
-  // 🔑 步驟一：使用 useLayoutEffect 處理非 Form Data 的同步載入，並確保即時儲存
+  // 🔑 步驟一：使用 useLayoutEffect 處理非 Form Data 的同步載入
+  //  - 先從 localStorage 載入作為 fallback
+  //  - 嘗試向 /api/sheet 取得中央資料，若成功則以中央資料為主並合併 localStorage
   useLayoutEffect(() => {
     // 1. Hydrate Cards
     setCards(loadCards());
-    
-    // 2. Hydrate Registration Details
-    setRegisteredDetails(loadRegistrationDetails());
-    
-    setIsClient(true);
-  }, []); 
+
+    let mounted = true;
+    const local = loadRegistrationDetails();
+
+    (async () => {
+      try {
+        const res = await fetch(SHEET_API_URL, { cache: "no-store" });
+        if (!mounted) return;
+        if (!res.ok) {
+          setRegisteredDetails(local);
+          setIsClient(true);
+          return;
+        }
+
+        const data = await res.json();
+        const parsed: Record<string, RegisteredDetail> = {};
+
+        const items = Array.isArray(data) ? data : Array.isArray((data as any).data) ? (data as any).data : [];
+
+        items.forEach((item: any) => {
+          if (!item) return;
+          // case: row is object with keys
+          if (typeof item === "object" && !Array.isArray(item)) {
+            const date = item.date || item.Date || item["日期"] || item[0];
+            const name = item.name || item.Name || item["姓名"] || item[1] || "";
+            const department = item.department || item.Department || item["部門"] || item[2] || "";
+            if (date) parsed[String(date).trim()] = { name: String(name || "").trim(), department: String(department || "").trim() };
+            return;
+          }
+
+          // case: row is array [date, name, department]
+          if (Array.isArray(item)) {
+            const [date, name, department] = item;
+            if (date) parsed[String(date).trim()] = { name: String(name || "").trim(), department: String(department || "").trim() };
+          }
+        });
+
+        // merge: prefer server data, but keep any local entries for dates not present on server
+        const final = { ...local, ...parsed };
+        if (mounted) setRegisteredDetails(final);
+      } catch (e) {
+        if (mounted) setRegisteredDetails(local);
+      } finally {
+        if (mounted) setIsClient(true);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // 🔑 步驟二：專門用於即時儲存 (姓名/部門) - 不再依賴 isFormLoaded 
   useLayoutEffect(() => {
