@@ -131,6 +131,21 @@ export default function RegisterPage() {
     return s;
   };
 
+  // Ensure the `cards` array contains entries for each date in `dates`.
+  // Missing dates will be appended with a fallback image.
+  const ensureCardsContainDates = (dates: string[]) => {
+    if (!dates || dates.length === 0) return;
+    setCards(prevCards => {
+      const existing = new Set(prevCards.map(c => c.date));
+      const additions = dates
+        .map(d => normalizeServerDateKey(d))
+        .filter(d => d && !existing.has(d))
+        .map(d => ({ date: d, image: "/game_16.png" }));
+      if (additions.length === 0) return prevCards;
+      return [...prevCards, ...additions];
+    });
+  };
+
 
   // 🔑 步驟一：使用 useLayoutEffect 處理非 Form Data 的同步載入
   //  - 先從 localStorage 載入作為 fallback
@@ -181,7 +196,11 @@ export default function RegisterPage() {
 
         // merge: prefer server data, but keep any local entries for dates not present on server
         const final = { ...local, ...parsed };
-        if (mounted) setRegisteredDetails(final);
+          if (mounted) {
+            setRegisteredDetails(final);
+            // make sure cards include server dates
+            ensureCardsContainDates(Object.keys(final));
+          }
       } catch (e) {
         if (mounted) setRegisteredDetails(local);
       } finally {
@@ -321,7 +340,7 @@ export default function RegisterPage() {
       // re-sync from server to ensure the central sheet is the source of truth
       try {
         const serverRes = await fetch(SHEET_API_URL, { cache: "no-store" });
-        if (serverRes.ok) {
+          if (serverRes.ok) {
           const serverData = await serverRes.json();
           const items = Array.isArray(serverData) ? serverData : Array.isArray((serverData as any).data) ? (serverData as any).data : [];
           const parsed: Record<string, RegisteredDetail> = {};
@@ -346,18 +365,21 @@ export default function RegisterPage() {
           const local = loadRegistrationDetails();
           const final = { ...local, ...parsed };
           setRegisteredDetails(final);
+          ensureCardsContainDates(Object.keys(final));
         } else {
           // fallback to optimistic update if server fetch fails
           setRegisteredDetails(prev => ({
             ...prev,
             [formData.date]: { name: formData.name, department: formData.department }
           }));
+          ensureCardsContainDates([formData.date]);
         }
       } catch (err) {
         setRegisteredDetails(prev => ({
           ...prev,
           [formData.date]: { name: formData.name, department: formData.department }
         }));
+        ensureCardsContainDates([formData.date]);
       }
 
       setFormData(prev => ({ name: prev.name, department: prev.department, date: "" }));
