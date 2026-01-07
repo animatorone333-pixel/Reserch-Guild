@@ -360,10 +360,10 @@ export default function Home() {
         }
         
         const avatarRaw: string =
-          parsed?.avatar ||
-          parsed?.image ||
-          parsed?.avatarUrl ||
-          parsed?.photoURL ||
+          (parsed as any)?.avatar ||
+          (parsed as any)?.image ||
+          (parsed as any)?.avatarUrl ||
+          (parsed as any)?.photoURL ||
           "";
           
         const avatar = normalizeAvatarUrl(avatarRaw);
