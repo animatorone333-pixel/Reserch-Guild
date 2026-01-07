@@ -109,6 +109,21 @@ export default function RegisterPage() {
   // 追蹤客戶端是否完成載入 (主要用於卡片/報名詳情/動畫)
   const [isClient, setIsClient] = useState(false); 
 
+  // normalize server date values (ISO date, localized string, or M/D) to card key format like "M/D"
+  const normalizeServerDateKey = (raw: any) => {
+    if (!raw) return "";
+    if (typeof raw === "string" && /^\d{1,2}\/\d{1,2}$/.test(raw.trim())) return raw.trim();
+    const asString = String(raw).trim();
+    const parsed = Date.parse(asString);
+    if (!isNaN(parsed)) {
+      const d = new Date(parsed);
+      const month = d.getMonth() + 1;
+      const day = d.getDate();
+      return `${month}/${day}`;
+    }
+    return asString;
+  };
+
 
   // 🔑 步驟一：使用 useLayoutEffect 處理非 Form Data 的同步載入
   //  - 先從 localStorage 載入作為 fallback
@@ -135,21 +150,25 @@ export default function RegisterPage() {
 
         const items = Array.isArray(data) ? data : Array.isArray((data as any).data) ? (data as any).data : [];
 
+        // use normalizeServerDateKey defined above
+
         items.forEach((item: any) => {
           if (!item) return;
           // case: row is object with keys
           if (typeof item === "object" && !Array.isArray(item)) {
-            const date = item.date || item.Date || item["日期"] || item[0];
+            const rawDate = item.date || item.Date || item["日期"] || item[0];
             const name = item.name || item.Name || item["姓名"] || item[1] || "";
             const department = item.department || item.Department || item["部門"] || item[2] || "";
-            if (date) parsed[String(date).trim()] = { name: String(name || "").trim(), department: String(department || "").trim() };
+            const dateKey = normalizeServerDateKey(rawDate);
+            if (dateKey) parsed[dateKey] = { name: String(name || "").trim(), department: String(department || "").trim() };
             return;
           }
 
           // case: row is array [date, name, department]
           if (Array.isArray(item)) {
-            const [date, name, department] = item;
-            if (date) parsed[String(date).trim()] = { name: String(name || "").trim(), department: String(department || "").trim() };
+            const [rawDate, name, department] = item;
+            const dateKey = normalizeServerDateKey(rawDate);
+            if (dateKey) parsed[dateKey] = { name: String(name || "").trim(), department: String(department || "").trim() };
           }
         });
 
@@ -292,20 +311,49 @@ export default function RegisterPage() {
 
       alert("報名成功！");
       setShowForm(false);
-      
-      setRegisteredDetails(prev => ({
-          ...prev,
-          [formData.date]: {
-              name: formData.name,
-              department: formData.department
-          }
-      }));
+      // re-sync from server to ensure the central sheet is the source of truth
+      try {
+        const serverRes = await fetch(SHEET_API_URL, { cache: "no-store" });
+        if (serverRes.ok) {
+          const serverData = await serverRes.json();
+          const items = Array.isArray(serverData) ? serverData : Array.isArray((serverData as any).data) ? (serverData as any).data : [];
+          const parsed: Record<string, RegisteredDetail> = {};
+          items.forEach((item: any) => {
+            if (!item) return;
+            if (typeof item === "object" && !Array.isArray(item)) {
+              const rawDate = item.date || item.Date || item["日期"] || item[0];
+              const name = item.name || item.Name || item["姓名"] || item[1] || "";
+              const department = item.department || item.Department || item["部門"] || item[2] || "";
+              const dateKey = normalizeServerDateKey(rawDate);
+              if (dateKey) parsed[dateKey] = { name: String(name || "").trim(), department: String(department || "").trim() };
+              return;
+            }
 
-      setFormData(prev => ({ 
-          name: prev.name, 
-          department: prev.department, 
-          date: "" 
-      }));
+            if (Array.isArray(item)) {
+              const [rawDate, name, department] = item;
+              const dateKey = normalizeServerDateKey(rawDate);
+              if (dateKey) parsed[dateKey] = { name: String(name || "").trim(), department: String(department || "").trim() };
+            }
+          });
+
+          const local = loadRegistrationDetails();
+          const final = { ...local, ...parsed };
+          setRegisteredDetails(final);
+        } else {
+          // fallback to optimistic update if server fetch fails
+          setRegisteredDetails(prev => ({
+            ...prev,
+            [formData.date]: { name: formData.name, department: formData.department }
+          }));
+        }
+      } catch (err) {
+        setRegisteredDetails(prev => ({
+          ...prev,
+          [formData.date]: { name: formData.name, department: formData.department }
+        }));
+      }
+
+      setFormData(prev => ({ name: prev.name, department: prev.department, date: "" }));
     } catch (error) {
       console.error("提交報名失敗:", error);
       alert("報名失敗，請稍後再試。");
