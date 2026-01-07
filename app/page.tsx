@@ -1174,6 +1174,23 @@ const creators = [
             />
 
             {/* 透明 OK 按鈕 */}
+            {/* 在 OK 按鈕上方顯示說明文字 */}
+            <div
+              style={{
+                position: "absolute",
+                left: "165px",
+                top: "228px",
+                width: "108px",
+                textAlign: "center",
+                color: "rgba(255,255,255,0.95)",
+                fontSize: 12,
+                fontWeight: 600,
+                zIndex: 3,
+                userSelect: "none",
+              }}
+            >
+              部門、姓名、暱稱即帳號
+            </div>
             <button
               onClick={handleLogin}
               style={{
