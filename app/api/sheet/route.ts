@@ -4,7 +4,7 @@ const SHEET_API_URL =
   "https://script.google.com/macros/s/AKfycby9PkqDMYO9Wfivz7B-2GRXoEPoZGvMaOYxnAGQV7B9b4TQ1RjTV7E2BeUyuUDJn9fK/exec";
 
 /** 把 JSONP 包裝的字串轉成 JSON（也支援純 JSON 或 {data:[...]}） */
-function parseMaybeJSONP(text: stringt) {
+function parseMaybeJSONP(text: string) {
   // 嘗試純 JSON
   try {
     const parsed = JSON.parse(text);
