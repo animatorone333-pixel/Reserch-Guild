@@ -325,8 +325,22 @@ export default function Home() {
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("mygame_loggedIn") === "true";
     const user = localStorage.getItem("mygame_user");
-    
-    if (isLoggedIn && user) {
+
+    // 快速預覽：若網址帶 ?guest=1，直接以訪客身分顯示（不寫入 localStorage）
+    const params = new URLSearchParams(window.location.search);
+    const forceGuest = params.get("guest") === "1";
+
+    if (forceGuest) {
+      setLoggedIn(true);
+      const guest = {
+        department: "訪客",
+        name: "訪客",
+        nickname: "訪客",
+        avatar: "/game_04.png",
+      };
+      setFormData(guest);
+      setCurrentUser({ nickname: guest.nickname, avatar: guest.avatar, loggedIn: true });
+    } else if (isLoggedIn && user) {
       try {
         const parsed = JSON.parse(user) as UserData & {profession?: string, loginDays?: number, lastLoginDate?: string};
 
