@@ -983,7 +983,6 @@ const creators = [
               backgroundImage: "url('/login_bg.png')",
               backgroundSize: "100% 100%",
               backgroundRepeat: "no-repeat",
-              position: "relative",
             }}
           >
             {/* X 圖片按鈕 */}
