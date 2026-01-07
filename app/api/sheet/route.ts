@@ -60,6 +60,6 @@ export async function POST(request: Request) {
     return NextResponse.json(data);
   } catch (err) {
     console.error("❌ Proxy POST error:", err);
-    return NextResponse.json({ error: err?.message ?? "POST failed" }, { status: 500 });
+   return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
