@@ -37,7 +37,7 @@ export async function GET() {
     return NextResponse.json(data);
   } catch (err) {
     console.error("❌ Proxy GET error:", err);
-    return NextResponse.json({ error: err?.message ?? "GET failed" }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
 
