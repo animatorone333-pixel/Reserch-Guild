@@ -238,12 +238,11 @@ export default function RegisterPage() {
 
         // merge: prefer server data, but keep any local entries for dates not present on server
         const final = { ...local, ...parsed };
-          if (mounted) {
         if (mounted) {
-            setRegisteredDetails(final);
-            // make sure cards include server dates
-            ensureCardsContainDates(Object.keys(final));
-          }
+          setRegisteredDetails(final);
+          // make sure cards include server dates
+          ensureCardsContainDates(Object.keys(final));
+        }
       } catch (e) {
         if (mounted) setRegisteredDetails(local);
       } finally {
@@ -306,11 +305,6 @@ export default function RegisterPage() {
     return () => {
       mounted = false;
       if (pollTimer) clearInterval(pollTimer);
-    };
-  }, []);
-
-    return () => {
-      mounted = false;
     };
   }, []);
 
