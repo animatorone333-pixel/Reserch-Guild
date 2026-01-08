@@ -44,6 +44,9 @@
   position: relative;
   padding: 20px 0; 
   cursor: pointer;
+  /* Prevent subpixel layout shift during transform/animation */
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
 
