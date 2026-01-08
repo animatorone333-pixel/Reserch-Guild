@@ -35,6 +35,28 @@ const defaultDateCards: CardData[] = [
   { date: "12/10", image: "/game_18.png" },
 ];
 
+// normalize server date values (ISO date, localized string, or M/D) to card key format like "M/D"
+const normalizeServerDateKey = (raw: any) => {
+  if (!raw) return "";
+  const s = String(raw).trim();
+  // match M/D or MM/DD like 01/05 or 1/5
+  const m = s.match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
+  if (m) {
+    const month = String(Number(m[1]));
+    const day = String(Number(m[2]));
+    return `${month}/${day}`;
+  }
+  const parsed = Date.parse(s);
+  if (!isNaN(parsed)) {
+    const d = new Date(parsed);
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    return `${month}/${day}`;
+  }
+  // fallback: return raw trimmed (will likely not match cards)
+  return s;
+};
+
 // 載入持久化資料函數 - 日期卡片
 const loadCards = (): CardData[] => {
   if (typeof window === 'undefined') return defaultDateCards;
@@ -42,9 +64,29 @@ const loadCards = (): CardData[] => {
   if (storedJson) {
     try {
       const parsedDates: string[] = JSON.parse(storedJson);
+
+      const inlineNormalize = (raw: any) => {
+        if (!raw) return "";
+        const s = String(raw).trim();
+        const m = s.match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
+        if (m) {
+          const month = String(Number(m[1]));
+          const day = String(Number(m[2]));
+          return `${month}/${day}`;
+        }
+        const parsed = Date.parse(s);
+        if (!isNaN(parsed)) {
+          const d = new Date(parsed);
+          const month = d.getUTCMonth() + 1;
+          const day = d.getUTCDate();
+          return `${month}/${day}`;
+        }
+        return s;
+      };
+
       return defaultDateCards.map((defaultCard, i) => ({
         ...defaultCard,
-        date: normalizeServerDateKey(parsedDates[i] || defaultCard.date), 
+        date: inlineNormalize(parsedDates[i] || defaultCard.date), 
       }));
     } catch (e) {
       console.error("Failed to parse stored dates:", e);
