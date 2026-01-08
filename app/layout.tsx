@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+// Initialize Sentry (client only) if DSN provided
+if (typeof window !== "undefined" && process.env.SENTRY_DSN) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require("../sentry.client.config");
+}
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
