@@ -1,0 +1,45 @@
+name: Sentry Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  sentry-release:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.SENTRY_AUTH_TOKEN && secrets.SENTRY_ORG && secrets.SENTRY_PROJECT }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Install sentry-cli
+        run: |
+          curl -sL https://sentry-cli-releases.s3.us-west-2.amazonaws.com/sentry-cli/latest/sentry-cli-Linux-x86_64 -o $HOME/sentry-cli
+          chmod +x $HOME/sentry-cli
+          sudo mv $HOME/sentry-cli /usr/local/bin/sentry-cli
+
+      - name: Create & upload release sourcemaps to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          set -e
+          REV=$(git rev-parse --short HEAD)
+          RELEASE="${{ github.workflow }}-${REV}"
+          echo "Creating release $RELEASE"
+          sentry-cli --auth-token "$SENTRY_AUTH_TOKEN" releases new -p "$SENTRY_PROJECT" "$RELEASE" --org "$SENTRY_ORG" || true
+          # upload .next sourcemaps
+          sentry-cli --auth-token "$SENTRY_AUTH_TOKEN" releases files "$RELEASE" upload-sourcemaps .next --url-prefix "~/_next" --rewrite --validate
+          sentry-cli --auth-token "$SENTRY_AUTH_TOKEN" releases finalize "$RELEASE"

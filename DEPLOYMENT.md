@@ -34,6 +34,16 @@
 2. 在 Vercel 專案 Settings -> Environment Variables，新增 `NEXT_PUBLIC_SUPABASE_URL` 與 `NEXT_PUBLIC_SUPABASE_ANON_KEY`。
 3. 部署分支（通常 `main`）後，Vercel 會自動 build 與 publish。
 
+若要啟用 Sentry sourcemap 自動上傳與部署整合，請在 GitHub Secrets / Vercel Project Secrets 中新增以下 secrets：
+
+- `SENTRY_DSN` — 在 Sentry 專案中取得，用於 runtime（可在 Vercel env 中設定）
+- `SENTRY_AUTH_TOKEN` — Sentry CI 上傳 token（只放在 CI secrets）
+- `SENTRY_ORG` — Sentry 組織 slug
+- `SENTRY_PROJECT` — Sentry 專案 slug
+- `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` — 若使用 GitHub Actions 自動部署到 Vercel
+
+我已在 repo 中新增一個 workflow (`.github/workflows/sentry_release.yml`)：當 `SENTRY_AUTH_TOKEN`、`SENTRY_ORG`、`SENTRY_PROJECT` 皆設定於 repository secrets 時，它會在每次推到 `main` 後建立一個 Sentry release 並上傳 `.next` 的 sourcemaps。
+
 若你希望透過 GitHub Actions 自動 build（並保留 Vercel 的 Git 觸發）也可，以下 CI 範例會在 push 時執行 build 檢查。
 
 ---
