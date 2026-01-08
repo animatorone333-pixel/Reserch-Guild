@@ -239,6 +239,7 @@ export default function RegisterPage() {
         // merge: prefer server data, but keep any local entries for dates not present on server
         const final = { ...local, ...parsed };
           if (mounted) {
+        if (mounted) {
             setRegisteredDetails(final);
             // make sure cards include server dates
             ensureCardsContainDates(Object.keys(final));
@@ -249,6 +250,64 @@ export default function RegisterPage() {
         if (mounted) setIsClient(true);
       }
     })();
+
+    // start poll-based sync (will run only on client)
+    let pollTimer: number | undefined;
+    const startPolling = () => {
+      const POLL_MS = 8000;
+      const fetchAndUpdate = async () => {
+        try {
+          const res = await fetch(SHEET_API_URL, { cache: "no-store" });
+          if (!res.ok) return;
+          const serverData = await res.json();
+          const items = Array.isArray(serverData) ? serverData : Array.isArray((serverData as any).data) ? (serverData as any).data : [];
+          const parsed: Record<string, RegisteredDetail> = {};
+          items.forEach((item: any) => {
+            if (!item) return;
+            if (typeof item === "object" && !Array.isArray(item)) {
+              const rawDate = item.date || item.Date || item["日期"] || item[0];
+              const name = item.name || item.Name || item["姓名"] || item[1] || "";
+              const department = item.department || item.Department || item["部門"] || item[2] || "";
+              const dateKey = normalizeServerDateKey(rawDate);
+              if (dateKey) parsed[dateKey] = { name: String(name || "").trim(), department: String(department || "").trim() };
+              return;
+            }
+            if (Array.isArray(item)) {
+              const [rawDate, name, department] = item;
+              const dateKey = normalizeServerDateKey(rawDate);
+              if (dateKey) parsed[dateKey] = { name: String(name || "").trim(), department: String(department || "").trim() };
+            }
+          });
+
+          // merge server with local fallback
+          const localNow = loadRegistrationDetails();
+          const finalNow = { ...localNow, ...parsed };
+
+          // update only when changed
+          const currentKeys = Object.keys(registeredDetails).sort().join(",");
+          const newKeys = Object.keys(finalNow).sort().join(",");
+          if (currentKeys !== newKeys) {
+            setRegisteredDetails(finalNow);
+            ensureCardsContainDates(Object.keys(finalNow));
+          }
+        } catch (err) {
+          // ignore transient errors
+          console.warn("poll /api/sheet failed", err);
+        }
+      };
+
+      // run immediately then on interval
+      fetchAndUpdate();
+      pollTimer = window.setInterval(fetchAndUpdate, POLL_MS);
+    };
+
+    if (typeof window !== 'undefined') startPolling();
+
+    return () => {
+      mounted = false;
+      if (pollTimer) clearInterval(pollTimer);
+    };
+  }, []);
 
     return () => {
       mounted = false;
