@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
 import ReactDOM from "react-dom";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 // import ProfileModal from "./ProfileModal"; // 移除，因為改由父元件渲染
 
 type Message = {
@@ -19,6 +20,12 @@ interface GuestIdentity {
 
 // 訪客身分在 localStorage 使用的 key（只存 "我是路人幾號"）
 const GUEST_ID_KEY = "chatbox_guest_identity_v1";
+
+// Supabase client (uses NEXT_PUBLIC_ env vars)
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const hasSupabase = SUPABASE_URL !== "" && SUPABASE_ANON_KEY !== "";
+const supabase: SupabaseClient | null = hasSupabase ? (createClient(SUPABASE_URL, SUPABASE_ANON_KEY) as SupabaseClient) : null;
 
 export default function ChatBox({
   currentUser,
@@ -87,21 +94,56 @@ export default function ChatBox({
   // 載入歷史訊息：從後端 API 取得共用聊天室紀錄
   useEffect(() => {
     let cancelled = false;
+    let subscription: any = null;
 
     const fetchMessages = async () => {
       try {
-        const res = await fetch("/api/chat");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled && Array.isArray(data)) {
-          setMessages(
-            data.map((m: any) => ({
-              text: m.text,
-              nickname: m.nickname,
-              avatar: m.avatar,
-              sender: "other" as const,
-            }))
-          );
+        if (supabase) {
+          const { data, error } = await supabase
+            .from("messages")
+            .select("id, text, nickname, avatar, created_at")
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          if (!cancelled && Array.isArray(data)) {
+            setMessages(
+              data.map((m: any) => ({
+                text: m.text,
+                nickname: m.nickname,
+                avatar: m.avatar,
+                sender: "other" as const,
+              }))
+            );
+          }
+
+          // subscribe to new messages
+          try {
+            subscription = supabase
+              .channel("public:messages")
+              .on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "messages" },
+                (payload: any) => {
+                  const m = payload.new;
+                  setMessages((prev) => {
+                    const exists = prev.some((pm) => pm.text === m.text && pm.nickname === m.nickname);
+                    if (exists) return prev;
+                    return [...prev, { text: m.text, nickname: m.nickname, avatar: m.avatar, sender: "other" }];
+                  });
+                }
+              )
+              .subscribe();
+          } catch (e) {
+            console.warn("Supabase subscribe failed", e);
+          }
+        } else {
+          const res = await fetch("/api/chat");
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!cancelled && Array.isArray(data)) {
+            setMessages(
+              data.map((m: any) => ({ text: m.text, nickname: m.nickname, avatar: m.avatar, sender: "other" as const }))
+            );
+          }
         }
       } catch (e) {
         console.warn("載入聊天室歷史訊息失敗", e);
@@ -112,6 +154,15 @@ export default function ChatBox({
 
     return () => {
       cancelled = true;
+      if (subscription) {
+        try {
+          if (typeof subscription.unsubscribe === "function") subscription.unsubscribe();
+          // try supabase removeChannel if available
+          if (supabase && typeof (supabase as any).removeChannel === "function") (supabase as any).removeChannel(subscription);
+        } catch (e) {
+          /* ignore */
+        }
+      }
     };
   }, []);
 
@@ -161,11 +212,15 @@ export default function ChatBox({
 
     // 再非同步送到後端儲存，讓其他人也能看到
     try {
-      await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, nickname, avatar }),
-      });
+      if (supabase) {
+        await supabase.from("messages").insert({ text, nickname, avatar });
+      } else {
+        await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, nickname, avatar }),
+        });
+      }
     } catch (e) {
       console.warn("送出聊天室訊息到伺服器失敗", e);
     }
