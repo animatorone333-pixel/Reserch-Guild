@@ -130,11 +130,11 @@ CREATE POLICY "Allow public update on event_dates"
 CREATE POLICY "Allow public delete on event_dates"
   ON event_dates FOR DELETE TO public USING (true);
 
--- 14. 插入預設日期
+-- 14. 插入預設日期（每月前三個星期一，以 2026/01 為例）
 INSERT INTO event_dates (event_date, image_url, display_order) VALUES
-  ('10/13', '/game_16.png', 1),
-  ('11/26', '/game_17.png', 2),
-  ('12/10', '/game_18.png', 3)
+  ('1/5', '/game_16.png', 1),
+  ('1/12', '/game_17.png', 2),
+  ('1/19', '/game_18.png', 3)
 ON CONFLICT (event_date) DO NOTHING;
 
 -- 15. 啟用 event_dates Realtime
@@ -224,7 +224,7 @@ npm run dev
 
 **測試項目**：
 1. ✅ 右上角顯示 🟢 Supabase（不是 🟡 Fallback）
-2. ✅ 看到三張卡片（10/13, 11/26, 12/10）
+2. ✅ 看到三張卡片（1/5, 1/12, 1/19）
 3. ✅ 點擊任一卡片報名
 4. ✅ 報名後名單立即出現在卡片下方
 
@@ -248,24 +248,25 @@ npm run dev
 ### 修改預設日期
 
 ```sql
--- 更新日期
-UPDATE event_dates SET event_date = '1/15' WHERE display_order = 1;
-UPDATE event_dates SET event_date = '2/20' WHERE display_order = 2;
-UPDATE event_dates SET event_date = '3/25' WHERE display_order = 3;
+-- 更新日期為每月前三個星期一（以 2026/02 為例）
+UPDATE event_dates SET event_date = '2/2' WHERE display_order = 1;
+UPDATE event_dates SET event_date = '2/9' WHERE display_order = 2;
+UPDATE event_dates SET event_date = '2/16' WHERE display_order = 3;
 ```
 
 ### 新增更多日期
 
 ```sql
+-- 新增第四個日期（如果需要）
 INSERT INTO event_dates (event_date, image_url, display_order) VALUES
-  ('4/10', '/game_19.png', 4);
+  ('1/26', '/game_19.png', 4);
 ```
 
 ### 修改卡片圖片
 
 ```sql
 UPDATE event_dates 
-SET image_url = '/your_image.png' 
+SET image_url = '/you/5age.png' 
 WHERE event_date = '10/13';
 ```
 
@@ -348,16 +349,16 @@ ORDER BY event_date;
 ┌─────────────────────────────────────┐
 │         event_dates 表              │
 ├─────────────────────────────────────┤
-│ 10/13 | /game_16.png | order: 1    │
-│ 11/26 | /game_17.png | order: 2    │
-│ 12/10 | /game_18.png | order: 3    │
+│ 1/5  | /game_16.png | order: 1     │
+│ 1/12 | /game_17.png | order: 2     │
+│ 1/19 | /game_18.png | order: 3     │
 └─────────────────────────────────────┘
               ↓ 關聯 (event_date)
 ┌─────────────────────────────────────┐
 │       registrations 表              │
-├─────────────────────────────────────┤
-│ 1. 王小明 | 研發部 | 10/13         │
-│ 2. 李小華 | 設計部 | 11/26         │
+├─────────────────/5           │
+│ 2. 李小華 | 設計部 | 1/12          │
+│ 3. 張小強 | 行銷部 | 1/5           │
 │ 3. 張小強 | 行銷部 | 10/13         │
 └─────────────────────────────────────┘
 ```

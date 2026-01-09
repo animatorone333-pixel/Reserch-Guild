@@ -123,11 +123,11 @@ CREATE POLICY "Allow public delete on event_dates"
   TO public
   USING (true);
 
--- 14. 插入預設日期（如果不存在）
+-- 14. 插入預設日期（每月前三個星期一，以 2026/01 為例）
 INSERT INTO event_dates (event_date, image_url, display_order) VALUES
-  ('10/13', '/game_16.png', 1),
-  ('11/26', '/game_17.png', 2),
-  ('12/10', '/game_18.png', 3)
+  ('1/5', '/game_16.png', 1),
+  ('1/12', '/game_17.png', 2),
+  ('1/19', '/game_18.png', 3)
 ON CONFLICT (event_date) DO NOTHING;
 
 -- 15. 啟用 event_dates Realtime

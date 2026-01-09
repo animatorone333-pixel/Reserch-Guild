@@ -47,11 +47,11 @@ interface RegistrationItem {
   created_at: string;
 }
 
-// 預設日期卡片
+// 預設日期卡片（每月前三個星期一）
 const defaultDateCards: CardData[] = [
-  { date: "10/13", image: "/game_16.png" },
-  { date: "11/26", image: "/game_17.png" },
-  { date: "12/10", image: "/game_18.png" },
+  { date: "1/5", image: "/game_16.png" },
+  { date: "1/12", image: "/game_17.png" },
+  { date: "1/19", image: "/game_18.png" },
 ];
 
 // 日期格式化函數
