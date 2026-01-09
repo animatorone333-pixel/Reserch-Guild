@@ -714,6 +714,7 @@ const creators = [
               transform: "translateX(-50%)",
               width: "min(600px, 92vw)",
               height: "180px",
+              overflow: "hidden",
             }}
           >
             {/* 狀態指示器 */}
@@ -747,8 +748,9 @@ const creators = [
                 position: "absolute",
                 top: "59%",
                 left: "50%",
-                transform: "translate(-50%, -50%)",
-                width: "92%",
+                transform: "translate(-50%, -50%) scale(0.9)",
+                transformOrigin: "center",
+                width: "86%",
                 height: "120px",
                 padding: "10px 16px",
                 boxSizing: "border-box",
@@ -829,6 +831,7 @@ const creators = [
                   fontWeight: "bold",
                   lineHeight: "18px",
                   whiteSpace: "pre-wrap",
+                  overflowY: "auto",
                 }}
               />
             </div>
