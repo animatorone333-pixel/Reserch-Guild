@@ -1,17 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-// Supabase 設定
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const hasSupabase = SUPABASE_URL !== "" && SUPABASE_ANON_KEY !== "";
-const supabase: SupabaseClient | null = hasSupabase 
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
-  : null;
-
-// Fallback localStorage key
 const CALENDAR_NOTES_KEY = "calendar_notes_v1";
 
 export default function CalendarPage() {
@@ -28,87 +18,13 @@ export default function CalendarPage() {
   const baseWidth = 1365;
   const baseHeight = 768;
 
-  // 行事曆備註：以日期 key (YYYY-MM-DD) 存文字
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  const [notesLoaded, setNotesLoaded] = useState(false);
-  const [useSupabase, setUseSupabase] = useState(false);
-
-  // 假設登入資訊
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [username, setUsername] = useState("訪客");
-  const [avatar, setAvatar] = useState("/game_04.png");
-
-  // === 從 Supabase 載入備註 ===
-  const loadFromSupabase = async () => {
-    if (!supabase) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('calendar_notes')
-        .select('*');
-
-      if (error) throw error;
-
-      if (data) {
-        const notesMap: Record<string, string> = {};
-        data.forEach(item => {
-          notesMap[item.date_key] = item.note_text || '';
-        });
-        setNotes(notesMap);
-        console.log("✅ 從 Supabase 載入行事曆備註成功");
-      }
-    } catch (error) {
-      console.error("❌ 從 Supabase 載入失敗:", error);
-      // Fallback 到 localStorage
-      loadFromLocalStorage();
-    }
-  };
-
-  // === Fallback: 從 localStorage 載入 ===
-  const loadFromLocalStorage = () => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(CALENDAR_NOTES_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object") {
-          setNotes(parsed);
-        }
-      }
-    } catch (e) {
-      console.warn("載入行事曆備註失敗", e);
-    }
-  };
-
-  // === 更新備註到 Supabase ===
-  const updateNoteInSupabase = async (dateKey: string, noteText: string) => {
-    if (!supabase) return;
-
-    try {
-      // 使用 upsert 來新增或更新
-      const { error } = await supabase
-        .from('calendar_notes')
-        .upsert({
-          date_key: dateKey,
-          note_text: noteText,
-          user_id: 'guest' // 可根據實際登入使用者修改
-        }, {
-          onConflict: 'date_key'
-        });
-
-      if (error) throw error;
-    } catch (error) {
-      console.error("❌ 更新 Supabase 備註失敗:", error);
-    }
-  };
-
-  // === 初始化 ===
   useEffect(() => {
-    // 載入登入資訊
     const loggedIn = localStorage.getItem("mygame_loggedIn") === "true";
     const user = localStorage.getItem("mygame_user");
     if (loggedIn && user) {
       const parsed = JSON.parse(user);
+
+      // 🔹 加上正規化，支援 formData.avatar
       let avatar =
         parsed?.avatar ||
         parsed?.image ||
@@ -125,7 +41,7 @@ export default function CalendarPage() {
           avatar = avatar.startsWith("/") ? avatar : "/" + avatar;
         }
       } else {
-        avatar = "/game_04.png";
+        avatar = "/game_04.png"; // 預設頭像
       }
 
       setIsLoggedIn(true);
@@ -137,7 +53,7 @@ export default function CalendarPage() {
       setAvatar("/game_04.png");
     }
 
-    // 縮放監聽
+    // 你的縮放監聽可以放在這裡
     const updateScale = () => {
       const scaleX = window.innerWidth / baseWidth;
       const scaleY = window.innerHeight / baseHeight;
@@ -148,72 +64,8 @@ export default function CalendarPage() {
     };
     updateScale();
     window.addEventListener("resize", updateScale);
-
-    // 載入備註資料
-    const initialize = async () => {
-      if (hasSupabase && supabase) {
-        setUseSupabase(true);
-        await loadFromSupabase();
-      } else {
-        setUseSupabase(false);
-        loadFromLocalStorage();
-      }
-      setNotesLoaded(true);
-    };
-
-    initialize();
-
     return () => window.removeEventListener("resize", updateScale);
   }, []);
-
-  // === Supabase Realtime 訂閱 ===
-  useEffect(() => {
-    if (!useSupabase || !supabase) return;
-
-    const channel = supabase
-      .channel('public:calendar_notes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'calendar_notes' },
-        (payload) => {
-          console.log('📡 Calendar notes 變更:', payload);
-          
-          // 即時更新本地狀態
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const newRecord = payload.new as any;
-            setNotes(prev => ({
-              ...prev,
-              [newRecord.date_key]: newRecord.note_text || ''
-            }));
-          } else if (payload.eventType === 'DELETE') {
-            const oldRecord = payload.old as any;
-            setNotes(prev => {
-              const newNotes = { ...prev };
-              delete newNotes[oldRecord.date_key];
-              return newNotes;
-            });
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [useSupabase]);
-
-  // === localStorage 持久化（Fallback 模式） ===
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!notesLoaded) return;
-    if (useSupabase) return; // Supabase 模式不需要 localStorage 持久化
-
-    try {
-      localStorage.setItem(CALENDAR_NOTES_KEY, JSON.stringify(notes));
-    } catch (e) {
-      console.warn("儲存行事曆備註失敗", e);
-    }
-  }, [notes, notesLoaded, useSupabase]);
 
   const monthNames = [
     "一月","二月","三月","四月","五月","六月",
@@ -226,7 +78,6 @@ export default function CalendarPage() {
       setCurrentYear(currentYear - 1);
     } else setCurrentMonth(currentMonth - 1);
   };
-
   const handleNextMonth = () => {
     if (currentMonth === 11) {
       setCurrentMonth(0);
@@ -239,19 +90,44 @@ export default function CalendarPage() {
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDay = new Date(currentYear, currentMonth, 1).getDay();
 
-  // === 處理備註變更 ===
-  const handleNoteChange = async (dateKey: string, value: string) => {
-    // 立即更新本地狀態（樂觀更新）
-    setNotes(prev => ({
-      ...prev,
-      [dateKey]: value,
-    }));
+  // 行事曆備註：以日期 key (YYYY-MM-DD) 存文字
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [notesLoaded, setNotesLoaded] = useState(false);
 
-    // 如果使用 Supabase，同步到資料庫
-    if (useSupabase) {
-      await updateNoteInSupabase(dateKey, value);
+  // 載入已儲存的備註
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(CALENDAR_NOTES_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          setNotes(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn("載入行事曆備註失敗", e);
+    } finally {
+      // 標記已完成初始化，之後才允許寫回 localStorage
+      setNotesLoaded(true);
     }
-  };
+  }, []);
+
+  // 備註變更時即時儲存（避免初次載入時就把舊資料覆蓋成空物件）
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!notesLoaded) return;
+    try {
+      localStorage.setItem(CALENDAR_NOTES_KEY, JSON.stringify(notes));
+    } catch (e) {
+      console.warn("儲存行事曆備註失敗", e);
+    }
+  }, [notes, notesLoaded]);
+
+  // 假設登入資訊
+  const [isLoggedIn, setIsLoggedIn] = useState(false); // 預設未登入
+  const [username, setUsername] = useState("小明"); // 測試用，之後換成真正使用者名字
+  const [avatar, setAvatar] = useState("/game_04.png"); // 測試用，之後換成真正頭像
 
   return (
     <main
@@ -265,22 +141,6 @@ export default function CalendarPage() {
         overflow: "hidden",
       }}
     >
-      {/* 資料來源指示器 */}
-      <div style={{ 
-        position: 'fixed', 
-        top: '10px', 
-        right: '10px', 
-        background: useSupabase ? '#4CAF50' : '#FF9800',
-        color: 'white',
-        padding: '8px 16px',
-        borderRadius: '20px',
-        fontSize: '12px',
-        fontWeight: 'bold',
-        zIndex: 1000
-      }}>
-        {useSupabase ? '🟢 Supabase' : '🟡 LocalStorage'}
-      </div>
-
       {/* === 舞台 A：日曆容器 === */}
       <div
         style={{
@@ -320,11 +180,12 @@ export default function CalendarPage() {
               margin: "auto",
               borderCollapse: "collapse",
               tableLayout: "fixed",
+              // 反向補償縮放比例，讓實際顯示字體大小維持接近 12px
               fontSize: `${12 / (scale || 1)}px`,
             }}
           >
             <thead>
-              {/* 月份標題列 */}
+              {/* 🔹 月份標題列 */}
               <tr>
                 <th
                   colSpan={7}
@@ -384,7 +245,11 @@ export default function CalendarPage() {
                               value={dateKey ? notes[dateKey] || "" : ""}
                               onChange={(e) => {
                                 if (!dateKey) return;
-                                handleNoteChange(dateKey, e.target.value);
+                                const value = e.target.value;
+                                setNotes((prev) => ({
+                                  ...prev,
+                                  [dateKey]: value,
+                                }));
                               }}
                               placeholder="行程..."
                             />
@@ -469,33 +334,34 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* === 舞台 C：回首頁按鈕 === */}
-      <div
+        {/* === 舞台 C：回首頁按鈕 === */}
+        <div
         style={{
-          position: "absolute",
-          bottom: "20px",
-          left: "50%",
-          transform: `translateX(-50%) scale(${scale})`,
-          transformOrigin: "bottom center",
+            position: "absolute",               // 固定在舞台內相對位置
+            bottom: "20px",                     // 距離舞台底部 20px
+            left: "50%",
+            transform: `translateX(-50%) scale(${scale})`, // 同步縮放
+            transformOrigin: "bottom center",   // 縮放基準點在底部中間
         }}
-      >
+        >
         <Link href="/">
-          <button
+            <button
             style={{
-              padding: "8px 12px",
-              fontSize: "14px",
-              backgroundColor: "#89af4cff",
-              color: "white",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontWeight: "bold",
+                padding: "8px 12px",
+                fontSize: "14px",
+                backgroundColor: "#89af4cff",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: "bold",
             }}
-          >
+            >
             回首頁
-          </button>
+            </button>
         </Link>
-      </div>
+        </div>
+
     </main>
   );
 }

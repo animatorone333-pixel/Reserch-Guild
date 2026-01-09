@@ -10,6 +10,7 @@
   background-position: center;
   background-repeat: no-repeat;
   background-color: #36281b; 
+  overflow-x: hidden;
 }
 
 .container {
@@ -20,30 +21,33 @@
   gap: 40px; 
   overflow: visible; 
   padding: 0; 
-  margin: 0;
+  margin: 0 auto; /* 確保水平置中 */
   box-sizing: border-box;
   transform: scale(0.95);
   transform-origin: center;
+  width: fit-content; /* 容器寬度自適應內容 */
 }
 
 
 /* 卡片基本樣式 */
 .card {
   width: 300px;
-  height: 500px;
+  min-height: 500px;
+  max-height: 700px;
   background-size: contain;
   background-repeat: no-repeat;
-  background-position: center;
+  background-position: top center;
   opacity: 0;
   transform: translateX(200px);
   transition: transform 0.8s ease-out, opacity 0.8s ease-out;
   display: flex;
   flex-direction: column; 
-  justify-content: space-between; 
+  justify-content: flex-start; 
   align-items: center;
   position: relative;
-  padding: 20px 0; 
+  padding: 20px 10px; 
   cursor: pointer;
+  overflow-y: auto;
   /* Prevent subpixel layout shift during transform/animation */
   will-change: transform, opacity;
   backface-visibility: hidden;
@@ -365,4 +369,181 @@
 
 .actionBtn:hover, .actionBtnDelete:hover, .saveBtn:hover, .cancelBtn:hover {
     transform: scale(1.05);
+}
+
+/* ========================================= */
+/* 新增：報名者名單區域樣式 */
+/* ========================================= */
+
+.registrationsList {
+  background: rgba(255, 246, 230, 0.95);
+  border: 4px solid #6c4b2a;
+  border-radius: 20px;
+  padding: 30px;
+  width: 90%;
+  max-width: 800px;
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+.registrationsTitle {
+  font-family: "Press Start 2P", sans-serif;
+  font-size: 18px;
+  color: #3b2200;
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 3px solid #b8860b;
+}
+
+.registrationsContent {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 10px;
+}
+
+/* 捲軸樣式 */
+.registrationsContent::-webkit-scrollbar {
+  width: 8px;
+}
+
+.registrationsContent::-webkit-scrollbar-track {
+  background: rgba(184, 134, 11, 0.2);
+  border-radius: 10px;
+}
+
+.registrationsContent::-webkit-scrollbar-thumb {
+  background: #b8860b;
+  border-radius: 10px;
+}
+
+.registrationsContent::-webkit-scrollbar-thumb:hover {
+  background: #8b6508;
+}
+
+.registrationRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  padding: 12px 20px;
+  background: rgba(255, 217, 102, 0.3);
+  border: 2px solid #b8860b;
+  border-radius: 10px;
+  font-family: Arial, sans-serif;
+  color: #3b2200;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.registrationRow:hover {
+  transform: translateX(5px);
+  background: rgba(255, 217, 102, 0.5);
+}
+
+.registrationNumber {
+  font-family: "Press Start 2P", sans-serif;
+  font-size: 12px;
+  color: #8b6508;
+  min-width: 30px;
+}
+
+.registrationName {
+  font-weight: bold;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.registrationDept {
+  font-size: 14px;
+  color: #6c4b2a;
+  flex-shrink: 0;
+}
+
+.registrationDate {
+  margin-left: auto;
+  font-family: "Press Start 2P", sans-serif;
+  font-size: 10px;
+  color: #8b6508;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.emptyMessage {
+  text-align: center;
+  color: #8b6508;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  padding: 40px 20px;
+}
+
+/* ========================================= */
+/* 卡片內報名者列表樣式 */
+/* ========================================= */
+
+.cardRegistrationsList {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* 卡片內報名者列表捲軸 */
+.cardRegistrationsList::-webkit-scrollbar {
+  width: 5px;
+}
+
+.cardRegistrationsList::-webkit-scrollbar-track {
+  background: rgba(184, 134, 11, 0.1);
+  border-radius: 5px;
+}
+
+.cardRegistrationsList::-webkit-scrollbar-thumb {
+  background: rgba(184, 134, 11, 0.5);
+  border-radius: 5px;
+}
+
+.cardRegistrationItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(184, 134, 11, 0.5);
+  border-radius: 6px;
+  font-family: Arial, sans-serif;
+  color: #3b2200;
+  font-size: 11px;
+  transition: background 0.2s;
+}
+
+.cardRegistrationItem:hover {
+  background: rgba(255, 217, 102, 0.6);
+}
+
+.cardRegNumber {
+  font-family: "Press Start 2P", sans-serif;
+  font-size: 9px;
+  color: #8b6508;
+  min-width: 20px;
+}
+
+.cardRegName {
+  font-weight: bold;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.cardRegDept {
+  font-size: 10px;
+  color: #6c4b2a;
 }

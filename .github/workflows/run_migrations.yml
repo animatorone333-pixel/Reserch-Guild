@@ -1,0 +1,46 @@
+name: Run DB Migrations (Supabase)
+
+on:
+  workflow_dispatch:
+    inputs:
+      policy:
+        description: 'RLS policy to apply (A=public insert, B=auth only)'
+        required: true
+        default: 'A'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Show chosen policy
+        run: echo "Chosen policy: ${{ github.event.inputs.policy }}"
+
+      - name: Run create table migration
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "ERROR: SUPABASE_DATABASE_URL secret is not set"; exit 1
+          fi
+          psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f db/create_messages_table.sql
+
+      - name: Run selected RLS policy
+        run: |
+          if [ "${{ github.event.inputs.policy }}" = "A" ]; then
+            echo "Applying public insert RLS (A)"
+            psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f db/rls_allow_public.sql
+          else
+            echo "Applying auth-only insert RLS (B)"
+            psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f db/rls_allow_auth.sql
+          fi
+
+      - name: Verify table
+        run: |
+          psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c "\dt public.messages" || true

@@ -203,26 +203,37 @@ export default function ChatBox({
 
     const text = input.trim();
 
-    // 先在前端立即顯示本次訊息
-    setMessages((prev) => [
-      ...prev,
-      { text, sender: "me", nickname, avatar },
-    ]);
-    setInput("");
-
-    // 再非同步送到後端儲存，讓其他人也能看到
+    // 嘗試送到後端儲存，成功後再顯示於 UI（避免重整後遺失）
     try {
       if (supabase) {
-        await supabase.from("messages").insert({ text, nickname, avatar });
+        const { data, error } = await supabase
+          .from("messages")
+          .insert({ text, nickname, avatar })
+          .select("id, text, nickname, avatar, created_at");
+        if (error) throw error;
+        const inserted = Array.isArray(data) ? data[0] : data;
+        setMessages((prev) => [
+          ...prev,
+          { text: inserted?.text ?? text, sender: "me", nickname: inserted?.nickname ?? nickname, avatar: inserted?.avatar ?? avatar },
+        ]);
       } else {
-        await fetch("/api/chat", {
+        const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text, nickname, avatar }),
         });
+        if (!res.ok) throw new Error("server error");
+        setMessages((prev) => [...prev, { text, sender: "me", nickname, avatar }]);
       }
+      setInput("");
     } catch (e) {
       console.warn("送出聊天室訊息到伺服器失敗", e);
+      try {
+        // 簡單告知使用者（可改成 UI 訊息或重試機制）
+        alert("訊息未送達，請稍後再試。");
+      } catch (_) {
+        /* ignore */
+      }
     }
   };
 
