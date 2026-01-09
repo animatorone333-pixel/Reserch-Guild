@@ -2,7 +2,16 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import ChatBox from "./components/ChatBox"; 
-import ProfileModal from "./components/ProfileModal"; 
+import ProfileModal from "./components/ProfileModal";
+import { createClient, SupabaseClient } from "@supabase/supabase-js"; 
+
+// Supabase 設定
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const hasSupabase = SUPABASE_URL !== "" && SUPABASE_ANON_KEY !== "";
+const supabase: SupabaseClient | null = hasSupabase 
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
+  : null;
 
 // 🔑 確保與報名頁面使用同一個 Key
 const FORM_INPUT_KEY = "form_input_v1"; 
@@ -123,6 +132,8 @@ export default function Home() {
 
   // 首頁最新公告：可自由編輯 + localStorage 持久化
   const [announcements, setAnnouncements] = useState<string>("");
+  const [useSupabase, setUseSupabase] = useState(false);
+  const [announcementsLoaded, setAnnouncementsLoaded] = useState(false);
   
   // 全域登入使用者狀態
   const [currentUser, setCurrentUser] = useState<{
@@ -197,15 +208,73 @@ export default function Home() {
     return () => window.removeEventListener("resize", updateScale);
   }, []);
 
-  // 載入 / 儲存 最新公告
-  useEffect(() => {
+  // === 從 Supabase 載入公告 ===
+  const loadAnnouncementFromSupabase = async () => {
+    if (!supabase) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+      if (error) {
+        console.error("❌ Supabase 查詢錯誤:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        
+        // 如果是找不到資料，嘗試插入預設公告
+        if (error.code === 'PGRST116') {
+          console.log("📝 資料表為空，嘗試插入預設公告...");
+          const defaultContent = "💌最新公告\n" +
+            "🔸下次桌遊將在10/13舉行!\n" +
+            "🔸歡迎推薦遊戲品項，請至桌遊投票區開盲盒!\n" +
+            "🔸本月主題日_夜市人生，將舉行射擊遊戲!歡迎來練習!";
+          
+          const { error: insertError } = await supabase
+            .from('announcements')
+            .insert({ id: 1, content: defaultContent, updated_by: 'system' });
+          
+          if (!insertError) {
+            setAnnouncements(defaultContent);
+            console.log("✅ 預設公告已插入並載入");
+            return;
+          } else {
+            console.error("❌ 插入預設公告失敗:", insertError);
+          }
+        }
+        
+        throw error;
+      }
+
+      if (data) {
+        setAnnouncements(data.content || '');
+        console.log("✅ 從 Supabase 載入公告成功");
+      }
+    } catch (error: any) {
+      console.error("❌ 從 Supabase 載入公告失敗:", {
+        error,
+        message: error?.message || "未知錯誤",
+        hint: "請檢查: 1) RLS 政策是否已設定 2) API key 是否正確 3) 資料表是否存在"
+      });
+      // Fallback 到 localStorage
+      loadAnnouncementFromLocalStorage();
+    }
+  };
+
+  // === Fallback: 從 localStorage 載入 ===
+  const loadAnnouncementFromLocalStorage = () => {
     if (typeof window === "undefined") return;
     try {
       const raw = localStorage.getItem("home_announcements_v1");
       if (raw) {
         setAnnouncements(raw);
       } else {
-        // 預設公告內容（只在沒有任何暫存時使用一次）
+        // 預設公告內容
         setAnnouncements(
           "💌最新公告\n" +
             "🔸下次桌遊將在10/13舉行!\n" +
@@ -216,7 +285,60 @@ export default function Home() {
     } catch (e) {
       console.warn("載入首頁公告失敗", e);
     }
+  };
+
+  // === 初始化：載入公告 ===
+  useEffect(() => {
+    const initialize = async () => {
+      if (hasSupabase && supabase) {
+        setUseSupabase(true);
+        await loadAnnouncementFromSupabase();
+      } else {
+        setUseSupabase(false);
+        loadAnnouncementFromLocalStorage();
+      }
+      setAnnouncementsLoaded(true);
+    };
+
+    initialize();
   }, []);
+
+  // === Supabase Realtime 訂閱 ===
+  useEffect(() => {
+    if (!useSupabase || !supabase) return;
+
+    const channel = supabase
+      .channel('public:announcements')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'announcements' },
+        (payload) => {
+          console.log('📡 Announcements 變更:', payload);
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            const newData = payload.new as any;
+            setAnnouncements(newData.content || '');
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [useSupabase]);
+
+  // === localStorage 持久化（Fallback 模式） ===
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!announcementsLoaded) return;
+    if (useSupabase) return;
+
+    try {
+      localStorage.setItem("home_announcements_v1", announcements);
+    } catch (e) {
+      console.warn("儲存首頁公告失敗", e);
+    }
+  }, [announcements, announcementsLoaded, useSupabase]);
 
   // 職業選擇器 (保持不變)
   const handlePrevJob = () => {
@@ -593,6 +715,20 @@ const creators = [
               height: "180px",
             }}
           >
+            {/* 狀態指示器 */}
+            <div
+              style={{
+                position: "absolute",
+                top: "10px",
+                right: "10px",
+                fontSize: "12px",
+                fontWeight: "bold",
+                zIndex: 10,
+              }}
+            >
+              {useSupabase ? "🟢 Supabase" : "🟡 LocalStorage"}
+            </div>
+            
             <img
               src="/game_01.png"
               alt="公告欄"
@@ -623,15 +759,49 @@ const creators = [
             >
               <textarea
                 value={announcements}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const value = e.target.value;
+                  // 樂觀更新
                   setAnnouncements(value);
-                  try {
-                    if (typeof window !== "undefined") {
-                      localStorage.setItem("home_announcements_v1", value);
+                  
+                  // 如果使用 Supabase，同步到資料庫
+                  if (useSupabase && supabase) {
+                    try {
+                      const { error } = await supabase
+                        .from('announcements')
+                        .update({ content: value })
+                        .eq('id', 1);
+                      
+                      if (error) {
+                        console.error("❌ 更新 Supabase 公告失敗:", {
+                          message: error.message,
+                          details: error.details,
+                          hint: error.hint,
+                          code: error.code
+                        });
+                        throw error;
+                      }
+                      console.log("✅ 公告已同步到 Supabase");
+                    } catch (err: any) {
+                      console.error("❌ 更新失敗，降級到 localStorage:", err?.message);
+                      // 降級到 localStorage
+                      try {
+                        if (typeof window !== "undefined") {
+                          localStorage.setItem("home_announcements_v1", value);
+                        }
+                      } catch (localErr) {
+                        console.warn("localStorage 儲存也失敗", localErr);
+                      }
                     }
-                  } catch (err) {
-                    console.warn("儲存首頁公告失敗", err);
+                  } else {
+                    // Fallback: 儲存到 localStorage
+                    try {
+                      if (typeof window !== "undefined") {
+                        localStorage.setItem("home_announcements_v1", value);
+                      }
+                    } catch (err) {
+                      console.warn("儲存首頁公告失敗", err);
+                    }
                   }
                 }}
                 style={{
