@@ -561,7 +561,6 @@ export default function RegisterPage() {
                 key={i}
                 className={`${styles.card} ${loadedIndexes.includes(i) ? styles.animateIn : ""}`}
                 style={{ backgroundImage: `url(${card.image})` }}
-                onClick={() => handleCardClick(card.date)}
               >
                 {/* 日期輸入/顯示部分 */}
                 {isEditingDates ? (
@@ -630,7 +629,7 @@ export default function RegisterPage() {
                 ) : (
                   // 顯示報名按鈕或空狀態
                   <div className={styles.emptyRegistrationSpace}>
-                    {!details && !isEditingDates && <p className={styles.emptyText}>點擊報名</p>}
+                    {!details && !isEditingDates && <p className={styles.emptyText}>按下報名</p>}
                   </div>
                 )}
                 
@@ -652,6 +651,10 @@ export default function RegisterPage() {
                   <button 
                     className={styles.registerButton}
                     disabled={isEditingDates || !!editingRegistrationDate} 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCardClick(card.date);
+                    }}
                   >
                     報名
                   </button>
