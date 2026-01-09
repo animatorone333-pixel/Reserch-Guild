@@ -710,8 +710,9 @@ const creators = [
             style={{
               position: "absolute",
               top: "350px",
-              left: "340px",
-              width: "600px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: "min(600px, 92vw)",
               height: "180px",
             }}
           >
@@ -733,8 +734,8 @@ const creators = [
               src="/game_01.png"
               alt="公告欄"
               style={{
-                width: "600px",
-                height: "180px",
+                width: "100%",
+                height: "100%",
                 display: "block",
                 margin: "0 auto",
                 transform: "scale(0.9)",
@@ -747,7 +748,7 @@ const creators = [
                 top: "59%",
                 left: "50%",
                 transform: "translate(-50%, -50%)",
-                width: "520px",
+                width: "86%",
                 color: "black",
                 fontWeight: "bold",
                 fontSize: "10px",
@@ -805,7 +806,7 @@ const creators = [
                   }
                 }}
                 style={{
-                  width: "440px",
+                  width: "100%",
                   height: "120px",
                   padding: "10px 16px",
                   border: "none",
