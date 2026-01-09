@@ -21,12 +21,10 @@
   align-items: center;
   gap: 40px; 
   overflow: visible; 
-  padding: 80px 0; /* 上下留空間給按鈕 */
+  padding: 0;
   margin: 0;
   box-sizing: border-box;
-  transform: scale(0.95);
-  transform-origin: center center;
-  /* 移除 width: fit-content，讓 flexbox 自然置中 */
+  /* 移除 transform，避免偏移問題 */
 }
 
 
