@@ -52,6 +52,21 @@
   backface-visibility: hidden;
 }
 
+.cardBottomArea {
+  width: 100%;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cardBottomDivider {
+  width: 85%;
+  border-top: 3px solid #b8860b;
+  margin: 10px 0 12px;
+  opacity: 0.9;
+}
+
 
 /* 滑入動畫 */
 .card.animateIn {
@@ -85,7 +100,7 @@
     font-size: 12px;
     cursor: pointer;
     transition: transform 0.2s;
-    margin-bottom: 30px; 
+  margin-bottom: 30px; 
 }
 
 .registerButton:hover:not([disabled]) {

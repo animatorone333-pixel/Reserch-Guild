@@ -647,12 +647,15 @@ export default function RegisterPage() {
                   </div>
                 )}
 
-                <button 
-                  className={styles.registerButton}
-                  disabled={isEditingDates || !!editingRegistrationDate} 
-                >
-                  報名
-                </button>
+                <div className={styles.cardBottomArea}>
+                  <div className={styles.cardBottomDivider} />
+                  <button 
+                    className={styles.registerButton}
+                    disabled={isEditingDates || !!editingRegistrationDate} 
+                  >
+                    報名
+                  </button>
+                </div>
               </div>
             );
           })}
