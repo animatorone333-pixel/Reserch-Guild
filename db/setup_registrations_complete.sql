@@ -72,7 +72,75 @@ EXCEPTION
     NULL;
 END $$;
 
--- 8. 驗證設定
+-- 8. 建立活動日期表
+CREATE TABLE IF NOT EXISTS event_dates (
+  id BIGSERIAL PRIMARY KEY,
+  event_date TEXT NOT NULL UNIQUE,
+  image_url TEXT DEFAULT '/game_16.png',
+  display_order INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 9. 建立 event_dates 索引
+CREATE INDEX IF NOT EXISTS idx_event_dates_display_order ON event_dates(display_order);
+
+-- 10. 建立 event_dates 更新觸發器
+DROP TRIGGER IF EXISTS update_event_dates_updated_at ON event_dates;
+CREATE TRIGGER update_event_dates_updated_at
+  BEFORE UPDATE ON event_dates
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- 11. 啟用 event_dates RLS
+ALTER TABLE event_dates ENABLE ROW LEVEL SECURITY;
+
+-- 12. 刪除舊的 event_dates 政策
+DROP POLICY IF EXISTS "Allow public read access on event_dates" ON event_dates;
+DROP POLICY IF EXISTS "Allow public insert on event_dates" ON event_dates;
+DROP POLICY IF EXISTS "Allow public update on event_dates" ON event_dates;
+DROP POLICY IF EXISTS "Allow public delete on event_dates" ON event_dates;
+
+-- 13. 建立 event_dates RLS 政策
+CREATE POLICY "Allow public read access on event_dates"
+  ON event_dates FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Allow public insert on event_dates"
+  ON event_dates FOR INSERT
+  TO public
+  WITH CHECK (true);
+
+CREATE POLICY "Allow public update on event_dates"
+  ON event_dates FOR UPDATE
+  TO public
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "Allow public delete on event_dates"
+  ON event_dates FOR DELETE
+  TO public
+  USING (true);
+
+-- 14. 插入預設日期（如果不存在）
+INSERT INTO event_dates (event_date, image_url, display_order) VALUES
+  ('10/13', '/game_16.png', 1),
+  ('11/26', '/game_17.png', 2),
+  ('12/10', '/game_18.png', 3)
+ON CONFLICT (event_date) DO NOTHING;
+
+-- 15. 啟用 event_dates Realtime
+DO $$ 
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE event_dates;
+EXCEPTION 
+  WHEN duplicate_object THEN 
+    NULL;
+END $$;
+
+-- 16. 驗證設定
 SELECT 
-  'registrations 資料表已設定完成' as message,
-  (SELECT count(*) FROM registrations) as total_registrations;
+  'registrations 和 event_dates 資料表已設定完成' as message,
+  (SELECT count(*) FROM registrations) as total_registrations,
+  (SELECT count(*) FROM event_dates) as total_event_dates;
