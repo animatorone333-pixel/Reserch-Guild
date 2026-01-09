@@ -634,13 +634,6 @@ export default function RegisterPage() {
                   </div>
                 )}
                 
-                <button 
-                  className={styles.registerButton}
-                  disabled={isEditingDates || !!editingRegistrationDate} 
-                >
-                  報名
-                </button>
-
                 {/* 該日期的報名者列表 */}
                 {dateRegistrations.length > 0 && (
                   <div className={styles.cardRegistrationsList} onClick={(e) => e.stopPropagation()}>
@@ -653,6 +646,13 @@ export default function RegisterPage() {
                     ))}
                   </div>
                 )}
+
+                <button 
+                  className={styles.registerButton}
+                  disabled={isEditingDates || !!editingRegistrationDate} 
+                >
+                  報名
+                </button>
               </div>
             );
           })}
