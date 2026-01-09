@@ -752,8 +752,6 @@ const creators = [
                 transformOrigin: "center",
                 width: "86%",
                 height: "120px",
-                padding: "10px 16px",
-                boxSizing: "border-box",
                 color: "black",
                 fontWeight: "bold",
                 fontSize: "10px",
@@ -761,14 +759,6 @@ const creators = [
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "stretch",
-                // 每行底部橫條（固定 18px 行高）畫在容器上，讓橫線延伸到整個文字區
-                background:
-                  "repeating-linear-gradient(to bottom, " +
-                  "transparent 0px, " +
-                  "transparent 17px, " +
-                  "#5c3b1a 17px, " +
-                  "#5c3b1a 18px)",
-                backgroundPosition: "0 8px",
               }}
             >
               <textarea
@@ -821,11 +811,19 @@ const creators = [
                 style={{
                   width: "100%",
                   height: "100%",
-                  padding: 0,
+                  padding: "10px 16px",
+                  boxSizing: "border-box",
                   border: "none",
                   resize: "none",
                   outline: "none",
-                  background: "transparent",
+                  // 一排文字一排線（固定 18px 行高）
+                  background:
+                    "repeating-linear-gradient(to bottom, " +
+                    "transparent 0px, " +
+                    "transparent 17px, " +
+                    "#5c3b1a 17px, " +
+                    "#5c3b1a 18px)",
+                  backgroundPosition: "0 8px",
                   color: "black",
                   fontSize: "10px",
                   fontWeight: "bold",
