@@ -30,6 +30,12 @@ export async function GET() {
   try {
     const res = await fetch(SHEET_API_URL, { cache: "no-store" });
     const text = await res.text();
+
+    if (!res.ok) {
+      console.error("❌ Upstream GET failed:", res.status, text);
+      return NextResponse.json({ error: `Upstream error: ${res.status} ${text}` }, { status: res.status });
+    }
+
     const data = parseMaybeJSONP(text);
 
     console.log("✅ [Proxy] 取得資料筆數:", Array.isArray(data) ? data.length : "非陣列");
@@ -53,6 +59,12 @@ export async function POST(request: Request) {
     });
 
     const text = await res.text();
+
+    if (!res.ok) {
+      console.error("❌ Upstream POST failed:", res.status, text);
+      return NextResponse.json({ error: `Upstream error: ${res.status} ${text}` }, { status: res.status });
+    }
+
     const data = parseMaybeJSONP(text);
 
     console.log("✅ [Proxy] 已送出報名資料:", body);
@@ -60,6 +72,6 @@ export async function POST(request: Request) {
     return NextResponse.json(data);
   } catch (err) {
     console.error("❌ Proxy POST error:", err);
-   return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }

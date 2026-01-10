@@ -135,38 +135,78 @@ export default function RegisterPage() {
   const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditingDates, setIsEditingDates] = useState(false); 
-  const [editingRegistrationDate, setEditingRegistrationDate] = useState<string | null>(null);
+  const [editingRegistrationId, setEditingRegistrationId] = useState<number | null>(null);
   const [tempRegistrationData, setTempRegistrationData] = useState<{ name: string; department: string }>({ name: "", department: "" });
   const [isClient, setIsClient] = useState(false);
   const [useSupabase, setUseSupabase] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [registrationsTable, setRegistrationsTable] = useState<string | null>(null);
+  const [hasEventDatesTable, setHasEventDatesTable] = useState<boolean>(true);
   
   // 新增：所有報名者列表
   const [allRegistrations, setAllRegistrations] = useState<RegistrationItem[]>([]);
+
+  const ensureRegistrationsTable = async (): Promise<string> => {
+    if (!supabase) throw new Error("Supabase client 未初始化");
+    if (registrationsTable) return registrationsTable;
+
+    const candidates = ["registrations", "register"];
+    for (const tableName of candidates) {
+      const { error } = await supabase.from(tableName).select("id").limit(1);
+      if (!error) {
+        setRegistrationsTable(tableName);
+        return tableName;
+      }
+    }
+
+    throw new Error("找不到報名資料表：請建立 public.registrations（建議）或 public.register");
+  };
+
+  const ensureEventDatesTable = async (): Promise<boolean> => {
+    if (!supabase) return false;
+    // 若已判定不存在，就不再查
+    if (!hasEventDatesTable) return false;
+
+    const { error } = await supabase.from("event_dates").select("id").limit(1);
+    if (error) {
+      setHasEventDatesTable(false);
+      return false;
+    }
+    return true;
+  };
 
   // === Supabase 資料載入函數 ===
   const loadFromSupabase = async () => {
     if (!supabase) return;
 
     try {
-      // 載入活動日期
-      const { data: datesData, error: datesError } = await supabase
-        .from('event_dates')
-        .select('*')
-        .order('display_order', { ascending: true });
+      // 載入活動日期（若 event_dates 不存在，使用預設卡片但不阻擋報名功能）
+      const eventDatesOk = await ensureEventDatesTable();
+      if (eventDatesOk) {
+        const { data: datesData, error: datesError } = await supabase
+          .from('event_dates')
+          .select('*')
+          .order('display_order', { ascending: true });
 
-      if (datesError) throw datesError;
+        if (datesError) throw datesError;
 
-      if (datesData && datesData.length > 0) {
-        const loadedCards = datesData.map(d => ({
-          date: normalizeServerDateKey(d.event_date),
-          image: d.image_url || '/game_16.png'
-        }));
-        setCards(loadedCards);
+        if (datesData && datesData.length > 0) {
+          const loadedCards = datesData.map(d => ({
+            date: normalizeServerDateKey(d.event_date),
+            image: d.image_url || '/game_16.png'
+          }));
+          setCards(loadedCards);
+        } else {
+          setCards(defaultDateCards);
+        }
+      } else {
+        setCards(defaultDateCards);
       }
 
       // 載入報名資料
+      const regsTable = await ensureRegistrationsTable();
       const { data: regsData, error: regsError } = await supabase
-        .from('registrations')
+        .from(regsTable)
         .select('*')
         .order('created_at', { ascending: true });
 
@@ -174,28 +214,33 @@ export default function RegisterPage() {
 
       if (regsData) {
         const details: Record<string, RegisteredDetail> = {};
-        regsData.forEach(reg => {
+        const registrations: RegistrationItem[] = regsData.map((reg: any) => ({
+          id: Number(reg.id),
+          name: String(reg.name || ""),
+          department: String(reg.department || ""),
+          event_date: String(reg.event_date || ""),
+          created_at: String(reg.created_at || ""),
+        }));
+
+        // 保留舊的每日期摘要（只取該日期最後一筆，供舊 UI/狀態使用）
+        registrations.forEach((reg) => {
           const dateKey = normalizeServerDateKey(reg.event_date);
-          if (dateKey) {
-            details[dateKey] = {
-              id: reg.id,
-              name: reg.name || "",
-              department: reg.department || ""
-            };
-          }
+          if (!dateKey) return;
+          details[dateKey] = { id: reg.id, name: reg.name, department: reg.department };
         });
         setRegisteredDetails(details);
         
         // 新增：設定所有報名者列表
-        setAllRegistrations(regsData);
+        setAllRegistrations(registrations);
       }
 
       console.log("✅ 從 Supabase 載入資料成功");
     } catch (error) {
       console.error("❌ 從 Supabase 載入失敗:", error);
-      // Fallback 到 localStorage
-      setCards(loadCards());
-      setRegisteredDetails(loadRegistrationDetails());
+      setLoadError(error instanceof Error ? error.message : String(error));
+      // 不再 fallback 到本地註冊資料，以避免造成資料不一致
+      setRegisteredDetails({});
+      setAllRegistrations([]);
     }
   };
 
@@ -245,11 +290,21 @@ export default function RegisterPage() {
     const initialize = async () => {
       if (hasSupabase && supabase) {
         setUseSupabase(true);
-        await loadFromSupabase();
+        try {
+          // 提前解析表名，避免後續行為因表名不一致而失敗
+          await ensureRegistrationsTable();
+          await ensureEventDatesTable();
+          await loadFromSupabase();
+        } catch (err) {
+          console.error("Supabase 初始化載入失敗:", err);
+          setLoadError(err instanceof Error ? err.message : String(err));
+        }
       } else {
         setUseSupabase(false);
-        await loadFromFallback();
+        console.warn("Supabase 未設定或無效，報名功能已停用。請設定 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY");
+        setLoadError("Supabase 未設定，請聯絡管理員以啟用註冊功能。");
       }
+
       setIsClient(true);
     };
 
@@ -259,13 +314,14 @@ export default function RegisterPage() {
   // === Supabase Realtime 訂閱 ===
   useEffect(() => {
     if (!useSupabase || !supabase) return;
+    if (!registrationsTable) return;
 
     // 訂閱報名資料變更
     const regsChannel = supabase
       .channel('public:registrations')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'registrations' },
+        { event: '*', schema: 'public', table: registrationsTable },
         (payload) => {
           console.log('📡 Registrations 變更:', payload);
           loadFromSupabase(); // 重新載入資料
@@ -274,23 +330,25 @@ export default function RegisterPage() {
       .subscribe();
 
     // 訂閱活動日期變更
-    const datesChannel = supabase
-      .channel('public:event_dates')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'event_dates' },
-        (payload) => {
-          console.log('📡 Event dates 變更:', payload);
-          loadFromSupabase(); // 重新載入資料
-        }
-      )
-      .subscribe();
+    const datesChannel = hasEventDatesTable
+      ? supabase
+          .channel('public:event_dates')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'event_dates' },
+            (payload) => {
+              console.log('📡 Event dates 變更:', payload);
+              loadFromSupabase(); // 重新載入資料
+            }
+          )
+          .subscribe()
+      : null;
 
     return () => {
       supabase.removeChannel(regsChannel);
-      supabase.removeChannel(datesChannel);
+      if (datesChannel) supabase.removeChannel(datesChannel);
     };
-  }, [useSupabase]);
+  }, [useSupabase, registrationsTable, hasEventDatesTable]);
 
   // === 表單輸入持久化 ===
   useEffect(() => {
@@ -339,6 +397,10 @@ export default function RegisterPage() {
 
     if (useSupabase && supabase) {
       try {
+        if (!hasEventDatesTable) {
+          alert("尚未建立 event_dates 資料表，無法編輯日期。請先在 Supabase 建立 event_dates。 ");
+          return;
+        }
         // 在 Supabase 更新日期
         const { error } = await supabase
           .from('event_dates')
@@ -356,8 +418,9 @@ export default function RegisterPage() {
         if (oldDate !== normalized && registeredDetails[oldDate]) {
           const detail = registeredDetails[oldDate];
           if (detail.id) {
+            const regsTable = await ensureRegistrationsTable();
             await supabase
-              .from('registrations')
+              .from(regsTable)
               .update({ event_date: normalized })
               .eq('id', detail.id);
           }
@@ -385,98 +448,76 @@ export default function RegisterPage() {
     }
   };
   
-  const handleEditRegistration = (date: string) => {
-    const details = registeredDetails[date];
-    if (details) {
-      setTempRegistrationData({ name: details.name, department: details.department });
-      setEditingRegistrationDate(date);
-    }
+  const handleEditRegistration = (reg: RegistrationItem) => {
+    setTempRegistrationData({ name: reg.name, department: reg.department });
+    setEditingRegistrationId(reg.id);
   };
 
   const handleSaveRegistration = async () => {
-    if (!editingRegistrationDate) return;
+    if (!editingRegistrationId) return;
 
     if (useSupabase && supabase) {
       try {
-        const existingDetail = registeredDetails[editingRegistrationDate];
-        
-        if (existingDetail?.id) {
-          // 更新現有記錄
-          const { error } = await supabase
-            .from('registrations')
-            .update({
-              name: tempRegistrationData.name,
-              department: tempRegistrationData.department
-            })
-            .eq('id', existingDetail.id);
+        const regsTable = await ensureRegistrationsTable();
+        const { error } = await supabase
+          .from(regsTable)
+          .update({
+            name: tempRegistrationData.name,
+            department: tempRegistrationData.department,
+          })
+          .eq('id', editingRegistrationId);
 
-          if (error) throw error;
-        } else {
-          // 新增記錄
-          const { error } = await supabase
-            .from('registrations')
-            .insert({
-              name: tempRegistrationData.name,
-              department: tempRegistrationData.department,
-              event_date: editingRegistrationDate
-            });
-
-          if (error) throw error;
-        }
-
+        if (error) throw error;
         alert("儲存成功！");
+
+        // Realtime 若未啟用，也能立即看到更新
+        await loadFromSupabase();
       } catch (error) {
         console.error("儲存失敗:", error);
-        alert("儲存失敗，請稍後再試");
+        const msg = error instanceof Error ? error.message : String(error);
+        alert(`儲存失敗：${msg}`);
       }
     } else {
-      // Fallback: 本地更新
-      setRegisteredDetails(prev => ({
-        ...prev,
-        [editingRegistrationDate]: tempRegistrationData,
-      }));
+      throw new Error("Supabase 未設定，無法儲存修改。");
     }
 
-    setEditingRegistrationDate(null);
+    setEditingRegistrationId(null);
     setTempRegistrationData({ name: "", department: "" });
   };
 
   const handleCancelRegistration = () => {
-    setEditingRegistrationDate(null);
+    setEditingRegistrationId(null);
     setTempRegistrationData({ name: "", department: "" });
   };
 
-  const handleDeleteRegistration = async (date: string) => {
-    if (!window.confirm("確定要刪除這個日期的報名資訊嗎？")) return;
+  const handleDeleteRegistration = async (regId: number) => {
+    if (!window.confirm("確定要刪除這筆報名資訊嗎？")) return;
 
     if (useSupabase && supabase) {
       try {
-        const detail = registeredDetails[date];
-        if (detail?.id) {
-          const { error } = await supabase
-            .from('registrations')
-            .delete()
-            .eq('id', detail.id);
+        const regsTable = await ensureRegistrationsTable();
+        const { error } = await supabase
+          .from(regsTable)
+          .delete()
+          .eq('id', regId);
 
-          if (error) throw error;
-          alert("刪除成功！");
-        }
+        if (error) throw error;
+        alert("刪除成功！");
+
+        // Realtime 若未啟用，也能立即看到更新
+        await loadFromSupabase();
       } catch (error) {
         console.error("刪除失敗:", error);
-        alert("刪除失敗，請稍後再試");
+        const msg = error instanceof Error ? error.message : String(error);
+        alert(`刪除失敗：${msg}`);
       }
     } else {
-      // Fallback: 本地刪除
-      setRegisteredDetails(prev => {
-        const newDetails = { ...prev };
-        delete newDetails[date];
-        return newDetails;
-      });
+      throw new Error("Supabase 未設定，無法刪除。");
     }
   };
 
   const handleCardClick = (date: string) => {
-    if (isEditingDates || editingRegistrationDate) return; 
+    if (isEditingDates || editingRegistrationId) return; 
     setFormData(prev => ({ 
       name: prev.name, 
       department: prev.department,
@@ -492,8 +533,9 @@ export default function RegisterPage() {
     try {
       if (useSupabase && supabase) {
         // 使用 Supabase
+        const regsTable = await ensureRegistrationsTable();
         const { error } = await supabase
-          .from('registrations')
+          .from(regsTable)
           .insert({
             name: formData.name,
             department: formData.department,
@@ -505,26 +547,17 @@ export default function RegisterPage() {
         alert("報名成功！");
         setShowForm(false);
         setFormData(prev => ({ name: prev.name, department: prev.department, date: "" }));
+
+        // Realtime 若未啟用，也能立即看到新增
+        await loadFromSupabase();
       } else {
-        // Fallback: 使用 API
-        const res = await fetch(SHEET_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        });
-
-        if (!res.ok) throw new Error("API 回應錯誤");
-
-        alert("報名成功！");
-        setShowForm(false);
-
-        // 重新載入資料
-        await loadFromFallback();
-        setFormData(prev => ({ name: prev.name, department: prev.department, date: "" }));
+        // Supabase is required for registrations
+        throw new Error("Supabase 未設定，無法提交報名。請聯絡管理員以啟用註冊功能。");
       }
     } catch (error) {
       console.error("提交報名失敗:", error);
-      alert("報名失敗，請稍後再試。");
+      const msg = error instanceof Error ? error.message : String(error);
+      alert(`報名失敗：${msg}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -538,7 +571,7 @@ export default function RegisterPage() {
           position: 'fixed', 
           top: '10px', 
           right: '10px', 
-          background: useSupabase ? '#4CAF50' : '#FF9800',
+          background: hasSupabase ? (useSupabase ? '#4CAF50' : '#FF9800') : '#f44336',
           color: 'white',
           padding: '8px 16px',
           borderRadius: '20px',
@@ -546,11 +579,28 @@ export default function RegisterPage() {
           fontWeight: 'bold',
           zIndex: 1000
         }}>
-          {useSupabase ? '🟢 Supabase' : '🟡 Fallback'}
+          {hasSupabase ? (useSupabase ? '🟢 Supabase' : '🟠 Supabase (初始化中)') : '🔴 Supabase 未設定'}
         </div>
+          {loadError && (
+            <div style={{
+              position: 'fixed',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              top: '70px',
+              background: '#fff3cd',
+              color: '#856404',
+              border: '1px solid #ffeeba',
+              padding: '12px 18px',
+              borderRadius: '8px',
+              zIndex: 1000,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+            }}>
+              <strong>注意：</strong> {loadError}
+            </div>
+          )}
+
           {cards.map((card, i) => {
-            const details = registeredDetails[card.date]; 
-            const isCurrentlyEditing = editingRegistrationDate === card.date;
+            const isCurrentlyEditing = editingRegistrationId !== null;
             // 取得該日期的所有報名者
             const dateRegistrations = allRegistrations.filter(
               reg => normalizeServerDateKey(reg.event_date) === card.date
@@ -575,74 +625,51 @@ export default function RegisterPage() {
                   <div className={styles.dateOverlay}>{card.date}</div>
                 )}
                 
-                {/* 報名資訊顯示 / 編輯部分 */}
-                {details && !isEditingDates ? (
-                  <div className={styles.registrationDetailsWrapper}> 
-                    {isCurrentlyEditing ? (
-                      // 編輯模式
-                      <div className={styles.registrationEdit}>
-                        <input
-                          type="text"
-                          value={tempRegistrationData.department}
-                          onChange={(e) => setTempRegistrationData(prev => ({ ...prev, department: e.target.value }))}
-                          placeholder="部門"
-                          className={styles.editInput}
-                          onClick={(e) => e.stopPropagation()} 
-                        />
-                        <input
-                          type="text"
-                          value={tempRegistrationData.name}
-                          onChange={(e) => setTempRegistrationData(prev => ({ ...prev, name: e.target.value }))}
-                          placeholder="姓名"
-                          className={styles.editInput}
-                          onClick={(e) => e.stopPropagation()} 
-                        />
-                        <div className={styles.editButtonRow}>
-                          <button onClick={(e) => { e.stopPropagation(); handleSaveRegistration(); }} className={styles.saveBtn}>儲存</button>
-                          <button onClick={(e) => { e.stopPropagation(); handleCancelRegistration(); }} className={styles.cancelBtn}>取消</button>
-                        </div>
-                      </div>
-                    ) : (
-                      // 顯示模式
-                      <>
-                        <div className={styles.registrationInfo}>
-                          <span>部門: {details.department}</span>
-                          <span>姓名: {details.name}</span>
-                        </div>
-                        <div className={styles.actionButtonRow}>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleEditRegistration(card.date); }} 
-                            className={styles.actionBtn}
-                          >
-                            編輯
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleDeleteRegistration(card.date); }} 
-                            className={styles.actionBtnDelete}
-                          >
-                            刪除
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  // 顯示報名按鈕或空狀態
+                {/* 空狀態提示 */}
+                {!isEditingDates && dateRegistrations.length === 0 && (
                   <div className={styles.emptyRegistrationSpace}>
-                    {!details && !isEditingDates && <p className={styles.emptyText}>按下報名</p>}
+                    <p className={styles.emptyText}>按下報名</p>
                   </div>
                 )}
                 
                 {/* 該日期的報名者列表 */}
                 {dateRegistrations.length > 0 && (
                   <div className={styles.cardRegistrationsList} onClick={(e) => e.stopPropagation()}>
-                    {dateRegistrations.map((reg, index) => (
-                      <div key={reg.id} className={styles.cardRegistrationItem}>
-                        <span className={styles.cardRegNumber}>{index + 1}.</span>
-                        <span className={styles.cardRegName}>{reg.name}</span>
-                        <span className={styles.cardRegDept}>({reg.department})</span>
-                      </div>
-                    ))}
+                    {dateRegistrations.map((reg, index) => {
+                      const isEditingThis = editingRegistrationId === reg.id;
+                      return (
+                        <div key={reg.id} className={styles.cardRegistrationItem}>
+                          <span className={styles.cardRegNumber}>{index + 1}.</span>
+                          {isEditingThis ? (
+                            <>
+                              <input
+                                type="text"
+                                value={tempRegistrationData.name}
+                                onChange={(e) => setTempRegistrationData(prev => ({ ...prev, name: e.target.value }))}
+                                placeholder="姓名"
+                                className={styles.editInput}
+                              />
+                              <input
+                                type="text"
+                                value={tempRegistrationData.department}
+                                onChange={(e) => setTempRegistrationData(prev => ({ ...prev, department: e.target.value }))}
+                                placeholder="部門"
+                                className={styles.editInput}
+                              />
+                              <button onClick={(e) => { e.stopPropagation(); handleSaveRegistration(); }} className={styles.saveBtn}>儲存</button>
+                              <button onClick={(e) => { e.stopPropagation(); handleCancelRegistration(); }} className={styles.cancelBtn}>取消</button>
+                            </>
+                          ) : (
+                            <>
+                              <span className={styles.cardRegName}>{reg.name}</span>
+                              <span className={styles.cardRegDept}>({reg.department})</span>
+                              <button onClick={(e) => { e.stopPropagation(); handleEditRegistration(reg); }} className={styles.actionBtn}>編輯</button>
+                              <button onClick={(e) => { e.stopPropagation(); handleDeleteRegistration(reg.id); }} className={styles.actionBtnDelete}>刪除</button>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -650,7 +677,7 @@ export default function RegisterPage() {
                   <div className={styles.cardBottomDivider} />
                   <button 
                     className={styles.registerButton}
-                    disabled={isEditingDates || !!editingRegistrationDate} 
+                    disabled={isEditingDates || editingRegistrationId !== null || !hasSupabase} 
                     onClick={(e) => {
                       e.stopPropagation();
                       handleCardClick(card.date);
@@ -667,7 +694,7 @@ export default function RegisterPage() {
           <button 
             className={styles.editBtn} 
             onClick={() => setIsEditingDates(prev => !prev)}
-            disabled={!!editingRegistrationDate}
+            disabled={editingRegistrationId !== null}
           >
             {isEditingDates ? "完成編輯" : "編輯日期"}
           </button>

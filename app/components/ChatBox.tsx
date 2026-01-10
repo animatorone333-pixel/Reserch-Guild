@@ -136,14 +136,8 @@ export default function ChatBox({
             console.warn("Supabase subscribe failed", e);
           }
         } else {
-          const res = await fetch("/api/chat");
-          if (!res.ok) return;
-          const data = await res.json();
-          if (!cancelled && Array.isArray(data)) {
-            setMessages(
-              data.map((m: any) => ({ text: m.text, nickname: m.nickname, avatar: m.avatar, sender: "other" as const }))
-            );
-          }
+          console.warn("Supabase 未設定，聊天室已停用");
+          return;
         }
       } catch (e) {
         console.warn("載入聊天室歷史訊息失敗", e);
@@ -217,13 +211,10 @@ export default function ChatBox({
           { text: inserted?.text ?? text, sender: "me", nickname: inserted?.nickname ?? nickname, avatar: inserted?.avatar ?? avatar },
         ]);
       } else {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, nickname, avatar }),
-        });
-        if (!res.ok) throw new Error("server error");
-        setMessages((prev) => [...prev, { text, sender: "me", nickname, avatar }]);
+        // Supabase required for chat
+        console.warn("嘗試送訊息但 Supabase 未設定");
+        alert("聊天室需要 Supabase，請聯絡管理員以啟用");
+        return;
       }
       setInput("");
     } catch (e) {
@@ -397,7 +388,7 @@ export default function ChatBox({
       <div style={{ display: "flex", gap: 6 }}>
         <input
           type="text"
-          placeholder="輸入訊息..."
+          placeholder={hasSupabase ? "輸入訊息..." : "聊天室需要 Supabase，已停用"}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -406,6 +397,7 @@ export default function ChatBox({
               handleSend();
             }
           }}
+          disabled={!hasSupabase}
           style={{
             flex: 1,
             fontSize: 9,
@@ -413,20 +405,22 @@ export default function ChatBox({
             outline: "none",
             padding: 8,
             borderRadius: 6,
-            background: "rgba(255,255,255,0.06)",
-            color: "white",
+            background: hasSupabase ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.02)",
+            color: hasSupabase ? "white" : "#ccc",
           }}
         />
         <button
           onClick={handleSend}
+          disabled={!hasSupabase}
           style={{
             padding: "8px 10px",
             fontSize: 9,
-            cursor: "pointer",
+            cursor: hasSupabase ? "pointer" : "not-allowed",
             border: "none",
             borderRadius: 6,
             backgroundColor: "#6c4b2a",
             color: "white",
+            opacity: hasSupabase ? 1 : 0.6,
           }}
         >
           送出
