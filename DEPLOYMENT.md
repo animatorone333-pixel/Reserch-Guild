@@ -15,6 +15,12 @@
 - `NEXT_PUBLIC_SUPABASE_URL` — 你的 Supabase 專案 URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase 公開 anon key（客戶端使用）
 
+如果你使用 GitHub Actions 來執行 `npm run build` / 上傳 Sentry sourcemaps，建議也在 GitHub Repository Secrets 中設定同名的 Secrets：
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+注意：GitHub Secrets 不會自動同步到 Vercel 執行環境。若你是用 Vercel Hosting（不管是 Vercel Git 整合或透過 Action 部署），仍需要在 Vercel Project Settings → Environment Variables 設定上述兩個變數，讓實際線上執行時能讀到。
+
 提示：Service Role Key（`SUPABASE_SERVICE_ROLE_KEY`）切勿放在 client 端或公開 repo；僅在安全的 server-side 或 CI secrets 使用。
 
 ---

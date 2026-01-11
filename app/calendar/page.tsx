@@ -4,11 +4,11 @@ import Link from "next/link";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // Supabase 設定
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const hasSupabase = SUPABASE_URL !== "" && SUPABASE_ANON_KEY !== "";
-const supabase: SupabaseClient | null = hasSupabase 
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
+const ENV_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const ENV_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const initialHasSupabase = ENV_SUPABASE_URL !== "" && ENV_SUPABASE_ANON_KEY !== "";
+const initialSupabase: SupabaseClient | null = initialHasSupabase
+  ? createClient(ENV_SUPABASE_URL, ENV_SUPABASE_ANON_KEY)
   : null;
 
 // Fallback localStorage key
@@ -32,6 +32,10 @@ export default function CalendarPage() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [notesLoaded, setNotesLoaded] = useState(false);
   const [useSupabase, setUseSupabase] = useState(false);
+
+  const [hasSupabase, setHasSupabase] = useState(initialHasSupabase);
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(initialSupabase);
+  const [initializedData, setInitializedData] = useState(false);
 
   // 假設登入資訊
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -149,8 +153,38 @@ export default function CalendarPage() {
     updateScale();
     window.addEventListener("resize", updateScale);
 
-    // 載入備註資料
-    const initialize = async () => {
+    return () => window.removeEventListener("resize", updateScale);
+  }, []);
+
+  // 若 build-time NEXT_PUBLIC_* 沒被內嵌，從 server runtime 取得設定並初始化 Supabase。
+  useEffect(() => {
+    let cancelled = false;
+    const loadConfig = async () => {
+      if (initialHasSupabase) return;
+      try {
+        const res = await fetch("/api/supabase-config", { cache: "no-store" });
+        const json = await res.json();
+        if (cancelled) return;
+        if (json?.hasSupabase && typeof json.url === "string" && typeof json.anonKey === "string") {
+          setHasSupabase(true);
+          setSupabase(createClient(json.url, json.anonKey));
+        }
+      } catch {
+        // ignore and keep fallback
+      }
+    };
+    loadConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 載入備註資料（等 Supabase config 就緒後再決策一次）
+  useEffect(() => {
+    const initializeData = async () => {
+      if (initializedData) return;
+      if (hasSupabase && !supabase) return;
+
       if (hasSupabase && supabase) {
         setUseSupabase(true);
         await loadFromSupabase();
@@ -159,12 +193,10 @@ export default function CalendarPage() {
         loadFromLocalStorage();
       }
       setNotesLoaded(true);
+      setInitializedData(true);
     };
-
-    initialize();
-
-    return () => window.removeEventListener("resize", updateScale);
-  }, []);
+    initializeData();
+  }, [hasSupabase, supabase, initializedData]);
 
   // === Supabase Realtime 訂閱 ===
   useEffect(() => {

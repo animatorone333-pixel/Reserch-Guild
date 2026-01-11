@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // Supabase 設定
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const hasSupabase = SUPABASE_URL !== "" && SUPABASE_ANON_KEY !== "";
-const supabase: SupabaseClient | null = hasSupabase 
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
+const ENV_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const ENV_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const initialHasSupabase = ENV_SUPABASE_URL !== "" && ENV_SUPABASE_ANON_KEY !== "";
+const initialSupabase: SupabaseClient | null = initialHasSupabase
+  ? createClient(ENV_SUPABASE_URL, ENV_SUPABASE_ANON_KEY)
   : null;
 
 // Fallback API
@@ -73,12 +73,39 @@ const loadPersistedItems = (): ShopItem[] => {
 
 export default function ShopPage() {
   const router = useRouter();
+
+  const [hasSupabase, setHasSupabase] = useState(initialHasSupabase);
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(initialSupabase);
+  const [initializedData, setInitializedData] = useState(false);
   
   const [items, setItems] = useState<ShopItem[]>(createInitialItems());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scale, setScale] = useState(1);
   const [itemsLoaded, setItemsLoaded] = useState(false);
   const [useSupabase, setUseSupabase] = useState(false);
+
+  // 若 build-time NEXT_PUBLIC_* 沒被內嵌，從 server runtime 取得設定並初始化 Supabase。
+  useEffect(() => {
+    let cancelled = false;
+    const loadConfig = async () => {
+      if (initialHasSupabase) return;
+      try {
+        const res = await fetch("/api/supabase-config", { cache: "no-store" });
+        const json = await res.json();
+        if (cancelled) return;
+        if (json?.hasSupabase && typeof json.url === "string" && typeof json.anonKey === "string") {
+          setHasSupabase(true);
+          setSupabase(createClient(json.url, json.anonKey));
+        }
+      } catch {
+        // ignore and keep fallback
+      }
+    };
+    loadConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // === 從 Supabase 載入商品 ===
   const loadFromSupabase = async () => {
@@ -118,6 +145,9 @@ export default function ShopPage() {
   // === 初始化 ===
   useEffect(() => {
     const initialize = async () => {
+      if (initializedData) return;
+      if (hasSupabase && !supabase) return;
+
       if (hasSupabase && supabase) {
         setUseSupabase(true);
         await loadFromSupabase();
@@ -127,10 +157,11 @@ export default function ShopPage() {
         setItems(loaded);
       }
       setItemsLoaded(true);
+      setInitializedData(true);
     };
 
     initialize();
-  }, []);
+  }, [hasSupabase, supabase, initializedData]);
 
   // === Supabase Realtime 訂閱 ===
   useEffect(() => {

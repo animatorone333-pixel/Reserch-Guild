@@ -7,11 +7,11 @@ import { useRouter } from "next/navigation";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // Supabase 設定
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const hasSupabase = SUPABASE_URL !== "" && SUPABASE_ANON_KEY !== "";
-const supabase: SupabaseClient | null = hasSupabase 
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
+const ENV_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const ENV_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const initialHasSupabase = ENV_SUPABASE_URL !== "" && ENV_SUPABASE_ANON_KEY !== "";
+const initialSupabase: SupabaseClient | null = initialHasSupabase
+  ? createClient(ENV_SUPABASE_URL, ENV_SUPABASE_ANON_KEY)
   : null;
 
 // Fallback API（當沒有 Supabase 時使用）
@@ -185,6 +185,9 @@ const loadFormInput = (): { name: string; department: string } => {
 
 export default function RegisterPage() {
   const router = useRouter();
+
+  const [hasSupabase, setHasSupabase] = useState(initialHasSupabase);
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(initialSupabase);
   
   const [formData, setFormData] = useState<FormData>({ 
     name: "", 
@@ -205,9 +208,35 @@ export default function RegisterPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [registrationsTable, setRegistrationsTable] = useState<string | null>(null);
   const [hasEventDatesTable, setHasEventDatesTable] = useState<boolean>(true);
+
+  const [initializedData, setInitializedData] = useState(false);
   
   // 新增：所有報名者列表
   const [allRegistrations, setAllRegistrations] = useState<RegistrationItem[]>([]);
+
+  // 若 build-time NEXT_PUBLIC_* 沒被內嵌（例如 Vercel 環境變數後加、未觸發重建），
+  // 這裡會從 server runtime 取得設定並初始化 Supabase。
+  useEffect(() => {
+    let cancelled = false;
+    const loadConfig = async () => {
+      if (initialHasSupabase) return;
+      try {
+        const res = await fetch("/api/supabase-config", { cache: "no-store" });
+        const json = await res.json();
+        if (cancelled) return;
+        if (json?.hasSupabase && typeof json.url === "string" && typeof json.anonKey === "string") {
+          setHasSupabase(true);
+          setSupabase(createClient(json.url, json.anonKey));
+        }
+      } catch {
+        // ignore and keep fallback
+      }
+    };
+    loadConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const ensureRegistrationsTable = async (): Promise<string> => {
     if (!supabase) throw new Error("Supabase client 未初始化");
@@ -277,64 +306,81 @@ export default function RegisterPage() {
     return true;
   };
 
-  // === Supabase 資料載入函數 ===
+  const checkEventDatesTable = async (): Promise<boolean> => {
+    const exists = await ensureEventDatesTable();
+    setHasEventDatesTable(exists);
+    return exists;
+  };
+
+  // === 從 Supabase 載入（日期卡片 + 報名資料） ===
   const loadFromSupabase = async () => {
     if (!supabase) return;
 
     try {
-      // 載入活動日期（若 event_dates 不存在，使用預設卡片但不阻擋報名功能）
-      const eventDatesOk = await ensureEventDatesTable();
-      if (eventDatesOk) {
-        const { data: datesData, error: datesError } = await supabase
-          .from('event_dates')
-          .select('*')
-          .order('display_order', { ascending: true });
+      // 先載入日期卡片（若有 event_dates）
+      let nextCards: CardData[] = defaultDateCards;
+      const hasDates = await ensureEventDatesTable();
+      setHasEventDatesTable(hasDates);
+
+      if (hasDates) {
+        const { data: dates, error: datesError } = await supabase
+          .from("event_dates")
+          .select("event_date, image_url, display_order")
+          .order("display_order", { ascending: true });
 
         if (datesError) throw datesError;
+        if (Array.isArray(dates) && dates.length > 0) {
+          const merged = dates
+            .slice(0, defaultDateCards.length)
+            .map((d: any, idx: number) => ({
+              date: normalizeServerDateKey(d.event_date),
+              image: String(d.image_url || defaultDateCards[idx]?.image || "/game_16.png"),
+            }));
 
-        if (datesData && datesData.length > 0) {
-          const loadedCards = datesData.map(d => ({
-            date: normalizeServerDateKey(d.event_date),
-            image: d.image_url || '/game_16.png'
-          }));
-          setCards(loadedCards);
-        } else {
-          setCards(defaultDateCards);
+          // 若資料筆數不足，補齊預設卡片
+          if (merged.length < defaultDateCards.length) {
+            for (let i = merged.length; i < defaultDateCards.length; i++) {
+              merged.push({ ...defaultDateCards[i] });
+            }
+          }
+          nextCards = merged;
         }
-      } else {
-        setCards(defaultDateCards);
       }
+      setCards(nextCards);
 
-      // 載入報名資料
+      // 載入所有報名資料
       const regsTable = await ensureRegistrationsTable();
       const { data: regsData, error: regsError } = await supabase
         .from(regsTable)
-        .select('*')
-        .order('created_at', { ascending: true });
+        .select("id, name, department, event_date, created_at")
+        .order("created_at", { ascending: true });
 
       if (regsError) throw regsError;
 
-      if (regsData) {
-        const details: Record<string, RegisteredDetail> = {};
-        const registrations: RegistrationItem[] = regsData.map((reg: any) => ({
-          id: Number(reg.id),
-          name: String(reg.name || ""),
-          department: String(reg.department || ""),
-          event_date: String(reg.event_date || ""),
-          created_at: String(reg.created_at || ""),
-        }));
+      const registrations: RegistrationItem[] = Array.isArray(regsData)
+        ? regsData.map((r: any) => ({
+            id: Number(r.id),
+            name: String(r.name || ""),
+            department: String(r.department || ""),
+            event_date: String(r.event_date || ""),
+            created_at: String(r.created_at || ""),
+          }))
+        : [];
 
-        // 保留舊的每日期摘要（只取該日期最後一筆，供舊 UI/狀態使用）
-        registrations.forEach((reg) => {
-          const dateKey = normalizeServerDateKey(reg.event_date);
-          if (!dateKey) return;
-          details[dateKey] = { id: reg.id, name: reg.name, department: reg.department };
-        });
-        setRegisteredDetails(details);
-        
-        // 新增：設定所有報名者列表
-        setAllRegistrations(registrations);
-      }
+      // 維持既有 registeredDetails（單日顯示用）
+      const detailsMap: Record<string, RegisteredDetail> = {};
+      registrations.forEach((r) => {
+        const key = normalizeServerDateKey(r.event_date);
+        if (!key) return;
+        detailsMap[key] = {
+          id: r.id,
+          name: r.name,
+          department: r.department,
+        };
+      });
+
+      setRegisteredDetails(detailsMap);
+      setAllRegistrations(registrations);
 
       console.log("✅ 從 Supabase 載入資料成功");
     } catch (error) {
@@ -345,6 +391,71 @@ export default function RegisterPage() {
       setAllRegistrations([]);
     }
   };
+
+  // === 初始化：決定使用 Supabase 或 Fallback ===
+  useEffect(() => {
+    const init = async () => {
+      if (initializedData) return;
+
+      setIsClient(true);
+
+      // 等待 runtime config（若需要）
+      if (hasSupabase && !supabase) return;
+
+      if (hasSupabase && supabase) {
+        try {
+          setUseSupabase(true);
+          setLoadError(null);
+          await ensureRegistrationsTable();
+          await checkEventDatesTable();
+          await loadFromSupabase();
+          setInitializedData(true);
+        } catch (e) {
+          setUseSupabase(false);
+
+          const msg = formatErrorMessage(e);
+          if (isLikelySupabasePermissionError(e)) {
+            setLoadError(
+              "Supabase 權限不足（RLS/GRANT）導致無法讀取資料，已改用 fallback /api/sheet。\n\n" +
+                registrationsRlsHint +
+                "\n\n原始錯誤：" +
+                msg
+            );
+          } else if (isLikelyMissingTableError(e)) {
+            setLoadError(
+              "Supabase 資料表不存在或 schema cache 尚未更新，已改用 fallback /api/sheet。\n\n" +
+                "請確認已執行 db/setup_registrations_complete.sql，並在 Supabase Dashboard → Database → Replication 開啟 event_dates / registrations Realtime。\n\n" +
+                "原始錯誤：" +
+                msg
+            );
+          } else if (isLikelySupabaseAuthOrConfigError(e)) {
+            setLoadError(
+              "Supabase 連線/授權失敗：請確認 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY 是否正確，且指向同一個 Supabase 專案。" +
+                "\n\n原始錯誤：" +
+                msg
+            );
+          } else {
+            setLoadError(
+              "Supabase 載入失敗，已改用 fallback /api/sheet。\n\n" +
+                "原始錯誤：" +
+                msg
+            );
+          }
+
+          await loadFromFallback();
+          setInitializedData(true);
+        }
+      } else {
+        setUseSupabase(false);
+        setLoadError(
+          "Supabase 未設定或無效，改用 fallback /api/sheet。若要啟用即時同步與管理功能，請設定 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY"
+        );
+        await loadFromFallback();
+        setInitializedData(true);
+      }
+    };
+    init();
+  }, [hasSupabase, supabase, initializedData]);
 
   // === Fallback: 從 API/localStorage 載入 ===
   const loadFromFallback = async () => {
@@ -422,35 +533,6 @@ export default function RegisterPage() {
     }
   };
 
-  // === 初始化：決定使用 Supabase 或 Fallback ===
-  useEffect(() => {
-    const initialize = async () => {
-      if (hasSupabase && supabase) {
-        setUseSupabase(true);
-        try {
-          // 提前解析表名，避免後續行為因表名不一致而失敗
-          await ensureRegistrationsTable();
-          await ensureEventDatesTable();
-          await loadFromSupabase();
-        } catch (err) {
-          console.error("Supabase 初始化載入失敗:", err);
-          setLoadError(formatErrorMessage(err));
-        }
-      } else {
-        setUseSupabase(false);
-        console.warn(
-          "Supabase 未設定或無效，改用 fallback /api/sheet。若要啟用即時同步與管理功能，請設定 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY"
-        );
-        setLoadError("Supabase 未設定，已改用 /api/sheet（Google 試算表）作為回退來源。");
-        await loadFromFallback();
-      }
-
-      setIsClient(true);
-    };
-
-    initialize();
-  }, []);
-
   // === Supabase Realtime 訂閱 ===
   useEffect(() => {
     if (!useSupabase || !supabase) return;
@@ -488,7 +570,7 @@ export default function RegisterPage() {
       supabase.removeChannel(regsChannel);
       if (datesChannel) supabase.removeChannel(datesChannel);
     };
-  }, [useSupabase, registrationsTable, hasEventDatesTable]);
+  }, [useSupabase, supabase, registrationsTable, hasEventDatesTable]);
 
   // === 清除舊的表單預設值（不再記憶姓名/部門） ===
   useEffect(() => {
