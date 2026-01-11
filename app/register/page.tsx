@@ -79,6 +79,34 @@ const formatErrorMessage = (err: unknown) => {
   return String(err);
 };
 
+const isLikelySupabaseAuthOrConfigError = (err: unknown) => {
+  const msg = (err && typeof err === "object" && "message" in err)
+    ? String((err as any).message || "")
+    : String(err || "");
+  const m = msg.toLowerCase();
+  return (
+    m.includes("invalid api key") ||
+    m.includes("no api key") ||
+    m.includes("jwt") ||
+    m.includes("unauthorized") ||
+    m.includes("forbidden") ||
+    m.includes("not authorized")
+  );
+};
+
+const isLikelyMissingTableError = (err: unknown) => {
+  const msg = (err && typeof err === "object" && "message" in err)
+    ? String((err as any).message || "")
+    : String(err || "");
+  const m = msg.toLowerCase();
+  return (
+    m.includes("could not find") ||
+    m.includes("does not exist") ||
+    m.includes("relation") ||
+    m.includes("schema cache")
+  );
+};
+
 const registrationsRlsHint =
   "Supabase 權限/RLS 可能未設定完成：請在 Supabase SQL Editor 依序執行 db/create_registrations_table.sql、db/create_event_dates_table.sql、db/rls_registrations.sql（或直接跑 db/setup_registrations_complete.sql）。\n" +
   "若你有自己手動開 RLS，務必包含 GRANT（含 registrations_id_seq / event_dates_id_seq 的 sequence 權限），否則會出現 permission denied。";
@@ -158,10 +186,9 @@ const loadFormInput = (): { name: string; department: string } => {
 export default function RegisterPage() {
   const router = useRouter();
   
-  const initialFormInput = loadFormInput();
   const [formData, setFormData] = useState<FormData>({ 
-    name: initialFormInput.name, 
-    department: initialFormInput.department, 
+    name: "", 
+    department: "", 
     date: "" 
   }); 
 
@@ -187,6 +214,7 @@ export default function RegisterPage() {
     if (registrationsTable) return registrationsTable;
 
     const candidates = ["registrations", "register"];
+    let lastError: unknown = null;
     for (const tableName of candidates) {
       const { error } = await supabase.from(tableName).select("id").limit(1);
       if (!error) {
@@ -194,17 +222,31 @@ export default function RegisterPage() {
         return tableName;
       }
 
+      lastError = error;
+
+      if (isLikelySupabaseAuthOrConfigError(error)) {
+        throw new Error(
+          "Supabase 連線/授權失敗：請確認 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY 是否正確，且指向同一個 Supabase 專案。" +
+            `\n（原始錯誤：${formatErrorMessage(error)}）`
+        );
+      }
+
       // 表可能存在，但被權限/RLS 擋住；這種情況要直接提示，而不是誤判成「找不到表」。
       if (isLikelySupabasePermissionError(error)) {
         throw new Error(
           `可以連到 Supabase，但資料表 public.${tableName} 被權限/RLS 擋住，導致無法讀取/寫入。\n` +
             registrationsRlsHint +
-            `\n（原始錯誤：${(error as any)?.message || String(error)}）`
+            `\n（原始錯誤：${formatErrorMessage(error)}）`
         );
       }
     }
 
-    throw new Error("找不到報名資料表：請建立 public.registrations（建議）或 public.register");
+    const extra = lastError ? `\n（最後一次錯誤：${formatErrorMessage(lastError)}）` : "";
+    throw new Error(
+      "找不到報名資料表：請建立 public.registrations（建議）或 public.register。\n" +
+        "建議直接在 Supabase SQL Editor 執行 db/setup_registrations_complete.sql。" +
+        extra
+    );
   };
 
   const ensureEventDatesTable = async (): Promise<boolean> => {
@@ -214,6 +256,21 @@ export default function RegisterPage() {
 
     const { error } = await supabase.from("event_dates").select("id").limit(1);
     if (error) {
+      if (isLikelySupabaseAuthOrConfigError(error)) {
+        throw new Error(
+          "Supabase 連線/授權失敗：請確認 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY 是否正確。" +
+            `\n（原始錯誤：${formatErrorMessage(error)}）`
+        );
+      }
+
+      if (isLikelySupabasePermissionError(error)) {
+        throw new Error(
+          "可以連到 Supabase，但 public.event_dates 讀取被權限/RLS 擋住。\n" +
+            registrationsRlsHint +
+            `\n（原始錯誤：${formatErrorMessage(error)}）`
+        );
+      }
+
       setHasEventDatesTable(false);
       return false;
     }
@@ -433,15 +490,12 @@ export default function RegisterPage() {
     };
   }, [useSupabase, registrationsTable, hasEventDatesTable]);
 
-  // === 表單輸入持久化 ===
+  // === 清除舊的表單預設值（不再記憶姓名/部門） ===
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(FORM_INPUT_KEY, JSON.stringify({ 
-        name: formData.name, 
-        department: formData.department 
-      }));
+      localStorage.removeItem(FORM_INPUT_KEY);
     }
-  }, [formData.name, formData.department]);
+  }, []);
 
   // === localStorage 持久化（作為 fallback） ===
   useEffect(() => {
@@ -625,7 +679,20 @@ export default function RegisterPage() {
 
         if (error) {
           if (isLikelySupabasePermissionError(error)) {
-            throw new Error(registrationsRlsHint + `\n（原始錯誤：${(error as any)?.message || String(error)}）`);
+            throw new Error(registrationsRlsHint + `\n（原始錯誤：${formatErrorMessage(error)}）`);
+          }
+          if (isLikelySupabaseAuthOrConfigError(error)) {
+            throw new Error(
+              "Supabase 連線/授權失敗：請確認 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY 是否正確，並確認 Vercel 已部署到最新 commit。" +
+                `\n（原始錯誤：${formatErrorMessage(error)}）`
+            );
+          }
+          if (isLikelyMissingTableError(error)) {
+            throw new Error(
+              "Supabase 資料表可能尚未建立，或 PostgREST schema cache 尚未更新。\n" +
+                "請在 Supabase SQL Editor 執行 db/setup_registrations_complete.sql，執行完等 30~60 秒再重試。" +
+                `\n（原始錯誤：${formatErrorMessage(error)}）`
+            );
           }
           throw error;
         }
