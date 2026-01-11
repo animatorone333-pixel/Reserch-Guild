@@ -836,9 +836,93 @@ export default function VotePage() {
                     borderRadius: "12px",
                     whiteSpace: "nowrap",
                     zIndex: 10,
+                    pointerEvents: "auto",
                   }}
                 >
-                  {name}
+                  {editingGameIndex === itemIndex ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+                      <div>{name}</div>
+                      <input
+                        type="text"
+                        value={(draftItems[itemIndex] ?? name)}
+                        onChange={(e) => handleDraftNameChange(itemIndex, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: 220,
+                          maxWidth: 260,
+                          padding: "6px 10px",
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.75)",
+                          background: "rgba(255,255,255,0.12)",
+                          color: "#fff",
+                          fontSize: 14,
+                          fontWeight: 800,
+                          textAlign: "center",
+                          outline: "none",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 10 }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleSaveOne(itemIndex);
+                          }}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: 10,
+                            border: "1px solid rgba(255,255,255,0.85)",
+                            background: "rgba(144, 238, 144, 0.55)",
+                            color: "#1b1b1b",
+                            fontSize: 12,
+                            fontWeight: 900,
+                            cursor: "pointer",
+                          }}
+                        >
+                          儲存
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCancelEditOne();
+                          }}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: 10,
+                            border: "1px solid rgba(255,255,255,0.85)",
+                            background: "rgba(255, 255, 255, 0.25)",
+                            color: "#fff",
+                            fontSize: 12,
+                            fontWeight: 900,
+                            cursor: "pointer",
+                          }}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+                      <div>{name}</div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEditOne(itemIndex);
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.85)",
+                          background: "rgba(255, 255, 255, 0.25)",
+                          color: "#fff",
+                          fontSize: 12,
+                          fontWeight: 900,
+                          cursor: "pointer",
+                        }}
+                      >
+                        編輯
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
