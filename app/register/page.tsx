@@ -212,6 +212,9 @@ export default function RegisterPage() {
   const [hasEventDatesTable, setHasEventDatesTable] = useState<boolean>(true);
 
   const [initializedData, setInitializedData] = useState(false);
+
+  // 右上角資料來源提示（debug 用）：預設隱藏
+  const [showDataSourceIndicator, setShowDataSourceIndicator] = useState(false);
   
   // 新增：所有報名者列表
   const [allRegistrations, setAllRegistrations] = useState<RegistrationItem[]>([]);
@@ -238,6 +241,15 @@ export default function RegisterPage() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const debugParam = (params.get("debug") || "").toLowerCase();
+    const enabledByQuery = params.has("debug") || ["1", "true", "on", "yes"].includes(debugParam);
+    const enabledByStorage = localStorage.getItem("mygame_debug_ui") === "1";
+    setShowDataSourceIndicator(enabledByQuery || enabledByStorage);
   }, []);
 
   type RegistrationsTarget = { table: string; eventCol: "event_date" | "date" };
@@ -885,28 +897,30 @@ export default function RegisterPage() {
   return (
     <main className={styles.main}>
       <div className={styles.container}>
-        {/* 資料來源指示器 */}
-        <div style={{ 
-          position: 'fixed', 
-          top: '10px', 
-          right: '10px', 
-          background: hasSupabase ? (useSupabase ? '#4CAF50' : '#FF9800') : '#7E57C2',
-          color: 'white',
-          padding: '8px 16px',
-          borderRadius: '20px',
-          fontSize: '12px',
-          fontWeight: 'bold',
-          zIndex: 1000
-        }}>
-          <div>
-            {hasSupabase ? (useSupabase ? '🟢 Supabase' : '🟠 Supabase (初始化中)') : '🟣 Fallback /api/sheet'}
+        {/* 資料來源指示器（debug 用）：加 ?debug=1 才顯示 */}
+        {showDataSourceIndicator && (
+          <div style={{ 
+            position: 'fixed', 
+            top: '10px', 
+            right: '10px', 
+            background: hasSupabase ? (useSupabase ? '#4CAF50' : '#FF9800') : '#7E57C2',
+            color: 'white',
+            padding: '8px 16px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            zIndex: 1000
+          }}>
+            <div>
+              {hasSupabase ? (useSupabase ? '🟢 Supabase' : '🟠 Supabase (初始化中)') : '🟣 Fallback /api/sheet'}
+            </div>
+            <div style={{ marginTop: 4, opacity: 0.95, fontWeight: 600 }}>
+              {useSupabase
+                ? `表：${registrationsTable || '（偵測中）'}；日期欄：${registrationsEventDateColumn}`
+                : '表：fallback'}
+            </div>
           </div>
-          <div style={{ marginTop: 4, opacity: 0.95, fontWeight: 600 }}>
-            {useSupabase
-              ? `表：${registrationsTable || '（偵測中）'}；日期欄：${registrationsEventDateColumn}`
-              : '表：fallback'}
-          </div>
-        </div>
+        )}
           {loadError && (
             <div style={{
               position: 'fixed',
