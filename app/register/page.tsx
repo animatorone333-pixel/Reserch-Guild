@@ -63,6 +63,22 @@ const isLikelySupabasePermissionError = (err: unknown) => {
   );
 };
 
+const formatErrorMessage = (err: unknown) => {
+  if (err instanceof Error) return err.message;
+
+  if (err && typeof err === "object") {
+    const anyErr: any = err;
+    const parts: string[] = [];
+    if (anyErr.message) parts.push(String(anyErr.message));
+    if (anyErr.details) parts.push(String(anyErr.details));
+    if (anyErr.hint) parts.push(String(anyErr.hint));
+    if (anyErr.code) parts.push(`code=${String(anyErr.code)}`);
+    if (parts.length > 0) return parts.join(" | ");
+  }
+
+  return String(err);
+};
+
 const registrationsRlsHint =
   "Supabase 權限/RLS 可能未設定完成：請在 Supabase SQL Editor 依序執行 db/create_registrations_table.sql、db/create_event_dates_table.sql、db/rls_registrations.sql（或直接跑 db/setup_registrations_complete.sql）。\n" +
   "若你有自己手動開 RLS，務必包含 GRANT（含 registrations_id_seq / event_dates_id_seq 的 sequence 權限），否則會出現 permission denied。";
@@ -266,7 +282,7 @@ export default function RegisterPage() {
       console.log("✅ 從 Supabase 載入資料成功");
     } catch (error) {
       console.error("❌ 從 Supabase 載入失敗:", error);
-      setLoadError(error instanceof Error ? error.message : String(error));
+      setLoadError(formatErrorMessage(error));
       // 不再 fallback 到本地註冊資料，以避免造成資料不一致
       setRegisteredDetails({});
       setAllRegistrations([]);
@@ -361,7 +377,7 @@ export default function RegisterPage() {
           await loadFromSupabase();
         } catch (err) {
           console.error("Supabase 初始化載入失敗:", err);
-          setLoadError(err instanceof Error ? err.message : String(err));
+          setLoadError(formatErrorMessage(err));
         }
       } else {
         setUseSupabase(false);
@@ -541,8 +557,7 @@ export default function RegisterPage() {
         await loadFromSupabase();
       } catch (error) {
         console.error("儲存失敗:", error);
-        const msg = error instanceof Error ? error.message : String(error);
-        alert(`儲存失敗：${msg}`);
+        alert(`儲存失敗：${formatErrorMessage(error)}`);
       }
     } else {
       throw new Error("Supabase 未設定，無法儲存修改。");
@@ -575,8 +590,7 @@ export default function RegisterPage() {
         await loadFromSupabase();
       } catch (error) {
         console.error("刪除失敗:", error);
-        const msg = error instanceof Error ? error.message : String(error);
-        alert(`刪除失敗：${msg}`);
+        alert(`刪除失敗：${formatErrorMessage(error)}`);
       }
     } else {
       throw new Error("Supabase 未設定，無法刪除。");
@@ -646,8 +660,7 @@ export default function RegisterPage() {
       }
     } catch (error) {
       console.error("提交報名失敗:", error);
-      const msg = error instanceof Error ? error.message : String(error);
-      alert(`報名失敗：${msg}`);
+      alert(`報名失敗：${formatErrorMessage(error)}`);
     } finally {
       setIsSubmitting(false);
     }
