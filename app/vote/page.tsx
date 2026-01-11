@@ -3,10 +3,64 @@
 "use client";
 import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
+
+// Supabase 設定（與首頁公告一致：client 端直連 + Realtime）
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const hasSupabase = SUPABASE_URL !== "" && SUPABASE_ANON_KEY !== "";
+const supabase: SupabaseClient | null = hasSupabase
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
 
 // 🔑 儲存 Key
 const VOTES_STORAGE_KEY = "mygame_votes_v1";
+const VOTE_GAMES_STORAGE_KEY = "vote_game_names_v1";
 const DEFAULT_VOTES = [0, 0, 0, 0]; 
+
+const DEFAULT_GAMES = [
+  "璀璨寶石",
+  "印加寶藏",
+  "德國蟑螂",
+  "寶可夢卡牌",
+];
+
+const isValidGames = (v: unknown): v is string[] => {
+  return (
+    Array.isArray(v) &&
+    v.length === 4 &&
+    v.every((x) => typeof x === "string")
+  );
+};
+
+const loadGamesLocal = (): string[] => {
+  if (typeof window === "undefined") return DEFAULT_GAMES;
+  try {
+    const raw = localStorage.getItem(VOTE_GAMES_STORAGE_KEY);
+    if (!raw) return DEFAULT_GAMES;
+    const parsed = JSON.parse(raw);
+    if (isValidGames(parsed)) return parsed;
+  } catch (e) {
+    console.warn("Failed to load stored vote game names", e);
+  }
+  return DEFAULT_GAMES;
+};
+
+const saveGamesLocal = (games: string[]) => {
+  try {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(VOTE_GAMES_STORAGE_KEY, JSON.stringify(games));
+    }
+  } catch (e) {
+    console.warn("Failed to save vote game names to localStorage", e);
+  }
+};
+
+const formatErrorMessage = (err: unknown) => {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "message" in err) return String((err as any).message || err);
+  return String(err || "");
+};
 
 // 🔑 載入投票結果
 function loadVotes(): number[] {
@@ -64,13 +118,13 @@ function normalizeAvatarUrl(u: string): string {
 export default function VotePage() {
   const router = useRouter();
 
+  const [useSupabase, setUseSupabase] = useState(false);
+  const [isEditingNames, setIsEditingNames] = useState(false);
+  const [editingGameIndex, setEditingGameIndex] = useState<number | null>(null);
+  const [draftItems, setDraftItems] = useState<string[]>(() => loadGamesLocal());
+
   // ===== 投票相關（原本保留） =====
-  const [items, setItems] = useState<string[]>([
-    "璀璨寶石",
-    "印加寶藏",
-    "德國蟑螂",
-    "寶可夢卡牌",
-  ]);
+  const [items, setItems] = useState<string[]>(() => loadGamesLocal());
   const [shuffledItems, setShuffledItems] = useState<number[]>([]); // 票數區順序：存索引
   const [chestGames, setChestGames] = useState<number[]>([]); // 寶箱順序：存索引
   const [selected, setSelected] = useState<number | null>(null);
@@ -113,6 +167,118 @@ export default function VotePage() {
     setChestGames(shuffle(baseIndexes));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ===== 遊戲名稱：Supabase 同步（像首頁公告一樣） =====
+  const loadGamesFromSupabase = async () => {
+    if (!supabase) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("vote_config")
+        .select("id, games")
+        .eq("id", 1)
+        .single();
+
+      if (error) {
+        // 資料不存在：插入預設
+        if ((error as any).code === "PGRST116") {
+          const { error: insertError } = await supabase
+            .from("vote_config")
+            .insert({ id: 1, games: DEFAULT_GAMES, updated_by: "system" });
+
+          if (!insertError) {
+            setItems(DEFAULT_GAMES);
+            saveGamesLocal(DEFAULT_GAMES);
+            return;
+          }
+        }
+        throw error;
+      }
+
+      const games = (data as any)?.games;
+      if (isValidGames(games)) {
+        setItems(games);
+        saveGamesLocal(games);
+        if (!isEditingNames && editingGameIndex === null) setDraftItems(games);
+      } else {
+        // 若資料格式不對，回退本地
+        const local = loadGamesLocal();
+        setItems(local);
+        if (!isEditingNames && editingGameIndex === null) setDraftItems(local);
+      }
+    } catch (e) {
+      console.warn("Failed to load vote_config from Supabase, fallback to localStorage", e);
+      const local = loadGamesLocal();
+      setItems(local);
+      if (!isEditingNames && editingGameIndex === null) setDraftItems(local);
+    }
+  };
+
+  const syncGamesToSupabase = async (games: string[]) => {
+    // 先保留本地快取，避免回首頁再回來沒資料
+    saveGamesLocal(games);
+
+    if (!useSupabase || !supabase) return;
+    try {
+      const { data, error } = await supabase
+        .from("vote_config")
+        .update({ games })
+        .eq("id", 1)
+        .select("id");
+
+      if (error) throw error;
+
+      // RLS 或條件不匹配時可能造成 0 rows affected，但不一定會丟 error。
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new Error(
+          "寫入 Supabase 似乎沒有套用到任何資料（vote_config id=1）。\n" +
+            "請確認你已在 Supabase 執行 db/rls_vote_config.sql，並允許 UPDATE。"
+        );
+      }
+    } catch (e) {
+      console.warn("Failed to update vote_config in Supabase, kept localStorage cache", e);
+      throw e;
+    }
+  };
+
+  // 初始化：決定是否使用 Supabase，並載入最新遊戲名稱
+  useEffect(() => {
+    if (hasSupabase && supabase) {
+      setUseSupabase(true);
+      void loadGamesFromSupabase();
+    } else {
+      setUseSupabase(false);
+      const local = loadGamesLocal();
+      setItems(local);
+      setDraftItems(local);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Realtime 訂閱：其他人改了遊戲名稱，這裡也要同步
+  useEffect(() => {
+    if (!useSupabase || !supabase) return;
+
+    const channel = supabase
+      .channel("public:vote_config")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "vote_config", filter: "id=eq.1" },
+        (payload) => {
+          const next = (payload as any)?.new?.games;
+          if (isValidGames(next)) {
+            setItems(next);
+            saveGamesLocal(next);
+            if (!isEditingNames && editingGameIndex === null) setDraftItems(next);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [useSupabase, isEditingNames, editingGameIndex]);
 
   // ===== 背景小遊戲（以背景為容器縮放） =====
   const BG_BASE_WIDTH = 1920;
@@ -414,13 +580,72 @@ export default function VotePage() {
     setSelected(null);
   };
 
-  // 🔧 編輯遊戲名稱：更新 items，使寶箱與票數顯示一起變動
-  const handleItemNameChange = (index: number, value: string) => {
-    setItems((prev) => {
+  // 🔧 編輯遊戲名稱（草稿）：只有按「儲存」才會同步到 Supabase
+  const handleDraftNameChange = (index: number, value: string) => {
+    setDraftItems((prev) => {
       const next = [...prev];
       next[index] = value;
       return next;
     });
+  };
+
+  const handleStartEditNames = () => {
+    setDraftItems(items);
+    setEditingGameIndex(null);
+    setIsEditingNames(true);
+  };
+
+  const handleCancelEditNames = () => {
+    setDraftItems(items);
+    setIsEditingNames(false);
+  };
+
+  const handleSaveNames = async () => {
+    const next = draftItems;
+    if (!isValidGames(next)) return;
+    setItems(next);
+    try {
+      await syncGamesToSupabase(next);
+    } catch (e) {
+      alert(`儲存失敗（已暫存本機）：${formatErrorMessage(e)}`);
+    }
+    setIsEditingNames(false);
+  };
+
+  const handleStartEditOne = (index: number) => {
+    setIsEditingNames(false);
+    setDraftItems(items);
+    setEditingGameIndex(index);
+  };
+
+  const handleCancelEditOne = () => {
+    setDraftItems(items);
+    setEditingGameIndex(null);
+  };
+
+  const handleSaveOne = async (index: number) => {
+    const raw = (draftItems[index] ?? "").trim();
+    if (!raw) {
+      alert("遊戲名稱不能為空");
+      return;
+    }
+
+    const next = [...items];
+    next[index] = raw;
+
+    if (!isValidGames(next)) {
+      alert("遊戲名稱格式不正確");
+      return;
+    }
+
+    setItems(next);
+    try {
+      await syncGamesToSupabase(next);
+    } catch (e) {
+      alert(`儲存失敗（已暫存本機）：${formatErrorMessage(e)}`);
+    }
+    setDraftItems(next);
+    setEditingGameIndex(null);
   };
   
   // 🔑 新增：重新投票函數
@@ -722,7 +947,8 @@ export default function VotePage() {
           }}
         >
             {shuffledItems.map((itemIndex, i) => {
-              const name = items[itemIndex] ?? "";
+              const canEditThis = isEditingNames || editingGameIndex === itemIndex;
+              const name = (canEditThis ? draftItems[itemIndex] : items[itemIndex]) ?? "";
               return (
             <div
               key={i}
@@ -761,25 +987,175 @@ export default function VotePage() {
               <input
                 type="text"
                 value={name}
-                onChange={(e) => handleItemNameChange(itemIndex, e.target.value)}
+                onChange={(e) => {
+                  if (!canEditThis) return;
+                  handleDraftNameChange(itemIndex, e.target.value);
+                }}
+                disabled={!canEditThis}
                 style={{
                   marginTop: "8px",
                   width: "100%",
                   padding: "2px 4px",
                   borderRadius: 6,
                   border: "1px solid #ffffff",
-                  background: "rgba(0, 0, 0, 0.5)",
+                  background: canEditThis ? "rgba(0, 0, 0, 0.5)" : "rgba(0, 0, 0, 0.28)",
                   color: "#fff",
                   fontSize: "16px",
                   fontWeight: "bold",
                   textAlign: "center",
                   textShadow: "0 2px 8px #333",
+                  cursor: canEditThis ? "text" : "not-allowed",
                 }}
                 placeholder={`遊戲 ${itemIndex + 1} 名稱`}
               />
+
+              {/* 單筆改名：編輯/儲存/取消（放在遊戲名稱下方） */}
+              {!isEditingNames && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: "flex",
+                    justifyContent: "center",
+                    gap: 8,
+                    pointerEvents: "auto",
+                  }}
+                >
+                  {editingGameIndex === itemIndex ? (
+                    <>
+                      <button
+                        onClick={() => handleSaveOne(itemIndex)}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.85)",
+                          background: "rgba(144, 238, 144, 0.55)",
+                          color: "#1b1b1b",
+                          fontSize: 12,
+                          fontWeight: 800,
+                          cursor: "pointer",
+                        }}
+                      >
+                        儲存
+                      </button>
+                      <button
+                        onClick={handleCancelEditOne}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.85)",
+                          background: "rgba(255, 255, 255, 0.35)",
+                          color: "#222",
+                          fontSize: 12,
+                          fontWeight: 800,
+                          cursor: "pointer",
+                        }}
+                      >
+                        取消
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleStartEditOne(itemIndex)}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(255,255,255,0.85)",
+                        background: "rgba(255, 255, 255, 0.35)",
+                        color: "#222",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      編輯
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             );
           })}
+        </div>
+
+        {/* 遊戲名稱：編輯/儲存 */}
+        <div
+          style={{
+            position: "absolute",
+            left: "570px",
+            top: "650px",
+            width: "540px",
+            transform: "scale(0.8)",
+            transformOrigin: "left top",
+            display: "flex",
+            justifyContent: "center",
+            gap: "14px",
+            pointerEvents: "auto",
+          }}
+        >
+          {!isEditingNames ? (
+            <button
+              onClick={handleStartEditNames}
+              style={{
+                padding: "10px 16px",
+                borderRadius: 10,
+                border: "1px solid white",
+                background: "rgba(255, 255, 255, 0.35)",
+                color: "#222",
+                fontSize: 16,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              編輯遊戲名稱
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={handleSaveNames}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 10,
+                  border: "1px solid white",
+                  background: "rgba(144, 238, 144, 0.55)",
+                  color: "#1b1b1b",
+                  fontSize: 16,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                儲存
+              </button>
+              <button
+                onClick={handleCancelEditNames}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 10,
+                  border: "1px solid white",
+                  background: "rgba(255, 255, 255, 0.35)",
+                  color: "#222",
+                  fontSize: 16,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                取消
+              </button>
+            </>
+          )}
+
+          <div
+            style={{
+              alignSelf: "center",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#fff",
+              textShadow: "0 2px 6px rgba(0,0,0,0.8)",
+              opacity: 0.9,
+              pointerEvents: "none",
+            }}
+          >
+            {useSupabase ? "🟢 Supabase 同步" : "🟡 本機暫存"}
+          </div>
         </div>
       </div>
     </div>

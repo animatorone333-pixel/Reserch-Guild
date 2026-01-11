@@ -109,7 +109,8 @@ const isLikelyMissingTableError = (err: unknown) => {
 
 const registrationsRlsHint =
   "Supabase 權限/RLS 可能未設定完成：請在 Supabase SQL Editor 依序執行 db/create_registrations_table.sql、db/create_event_dates_table.sql、db/rls_registrations.sql（或直接跑 db/setup_registrations_complete.sql）。\n" +
-  "若你有自己手動開 RLS，務必包含 GRANT（含 registrations_id_seq / event_dates_id_seq 的 sequence 權限），否則會出現 permission denied。";
+  "若你使用 legacy public.register 表，請改執行 db/rls_register.sql（會同時處理 register + event_dates 的 RLS/GRANT）。\n" +
+  "若你有自己手動開 RLS，務必包含 GRANT（含 registrations_id_seq / event_dates_id_seq（或 register_id_seq） 的 sequence 權限），否則會出現 permission denied。";
 
 // 預設日期卡片（每月前三個星期一）
 const defaultDateCards: CardData[] = [
@@ -719,20 +720,30 @@ export default function RegisterPage() {
   };
 
   const handleSaveRegistration = async () => {
-    if (!editingRegistrationId) return;
+    if (editingRegistrationId === null) return;
 
     if (useSupabase && supabase) {
       try {
         const regsTable = await ensureRegistrationsTable();
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from(regsTable)
           .update({
             name: tempRegistrationData.name,
             department: tempRegistrationData.department,
           })
-          .eq('id', editingRegistrationId);
+          .eq('id', editingRegistrationId)
+          .select('id');
 
         if (error) throw error;
+
+        // PostgREST / RLS 可能導致「0 rows affected 但不報錯」；此時要提示使用者同步沒成功。
+        if (!Array.isArray(data) || data.length === 0) {
+          throw new Error(
+            `更新沒有套用到任何資料（table=${regsTable}, id=${editingRegistrationId}）。\n` +
+              "常見原因：RLS 未允許 UPDATE、你目前使用的是 public.register 但沒套用 db/rls_register.sql、或該筆資料已不存在。\n\n" +
+              registrationsRlsHint
+          );
+        }
         alert("儲存成功！");
 
         // Realtime 若未啟用，也能立即看到更新
@@ -760,12 +771,22 @@ export default function RegisterPage() {
     if (useSupabase && supabase) {
       try {
         const regsTable = await ensureRegistrationsTable();
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from(regsTable)
           .delete()
-          .eq('id', regId);
+          .eq('id', regId)
+          .select('id');
 
         if (error) throw error;
+
+        // 同上：避免顯示成功但其實沒有刪到（RLS/表名/ID 不匹配都會發生）
+        if (!Array.isArray(data) || data.length === 0) {
+          throw new Error(
+            `刪除沒有影響任何資料（table=${regsTable}, id=${regId}）。\n` +
+              "常見原因：RLS 未允許 DELETE、你目前使用的是 public.register 但沒套用 db/rls_register.sql、或該筆資料已不存在。\n\n" +
+              registrationsRlsHint
+          );
+        }
         alert("刪除成功！");
 
         // Realtime 若未啟用，也能立即看到更新
@@ -877,7 +898,14 @@ export default function RegisterPage() {
           fontWeight: 'bold',
           zIndex: 1000
         }}>
-          {hasSupabase ? (useSupabase ? '🟢 Supabase' : '🟠 Supabase (初始化中)') : '🟣 Fallback /api/sheet'}
+          <div>
+            {hasSupabase ? (useSupabase ? '🟢 Supabase' : '🟠 Supabase (初始化中)') : '🟣 Fallback /api/sheet'}
+          </div>
+          <div style={{ marginTop: 4, opacity: 0.95, fontWeight: 600 }}>
+            {useSupabase
+              ? `表：${registrationsTable || '（偵測中）'}；日期欄：${registrationsEventDateColumn}`
+              : '表：fallback'}
+          </div>
         </div>
           {loadError && (
             <div style={{

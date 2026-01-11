@@ -47,6 +47,8 @@
   padding: 20px 10px; 
   cursor: pointer;
   overflow-y: auto;
+  overflow-x: hidden;
+  --cardInnerWidth: 78%;
   /* Prevent subpixel layout shift during transform/animation */
   will-change: transform, opacity;
   backface-visibility: hidden;
@@ -61,7 +63,7 @@
 }
 
 .cardBottomDivider {
-  width: 85%;
+  width: var(--cardInnerWidth);
   border-top: 3px solid #b8860b;
   margin: 10px 0 12px;
   opacity: 0.9;
@@ -501,14 +503,18 @@
 /* ========================================= */
 
 .cardRegistrationsList {
-  width: 100%;
-  margin-top: 10px;
+  width: var(--cardInnerWidth);
+  box-sizing: border-box;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 26px;
   padding: 10px 5px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   max-height: 200px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* 卡片內報名者列表捲軸 */
@@ -530,6 +536,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  row-gap: 4px;
+  flex-wrap: wrap;
+  width: 100%;
+  box-sizing: border-box;
   padding: 6px 8px;
   background: rgba(255, 255, 255, 0.8);
   border: 1px solid rgba(184, 134, 11, 0.5);
@@ -554,10 +564,38 @@
 .cardRegName {
   font-weight: bold;
   font-size: 11px;
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cardRegDept {
   font-size: 10px;
   color: #6c4b2a;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 卡片內編輯模式：輸入框允許縮排/換行，避免超框 */
+.cardRegistrationItem .editInput {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+/* 空狀態提示：寬度同卡片內容區，避免超框 */
+.emptyRegistrationSpace {
+  width: var(--cardInnerWidth);
+  box-sizing: border-box;
+  margin: 26px auto 0;
+  padding: 10px 5px;
+  text-align: center;
+}
+
+.emptyText {
+  margin: 0;
 }
