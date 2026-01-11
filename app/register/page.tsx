@@ -952,54 +952,55 @@ export default function RegisterPage() {
                 )}
                 
                 {/* 空狀態提示 */}
-                {!isEditingDates && dateRegistrations.length === 0 && (
-                  <div className={styles.emptyRegistrationSpace}>
-                    <p className={styles.emptyText}>按下報名</p>
-                  </div>
-                )}
-                
-                {/* 該日期的報名者列表 */}
-                {dateRegistrations.length > 0 && (
-                  <div className={styles.cardRegistrationsList} onClick={(e) => e.stopPropagation()}>
-                    {dateRegistrations.map((reg, index) => {
-                      const isEditingThis = editingRegistrationId === reg.id;
-                      return (
-                        <div key={reg.id} className={styles.cardRegistrationItem}>
-                          <span className={styles.cardRegNumber}>{index + 1}.</span>
-                          {isEditingThis ? (
-                            <>
-                              <input
-                                type="text"
-                                value={tempRegistrationData.name}
-                                onChange={(e) => setTempRegistrationData(prev => ({ ...prev, name: e.target.value }))}
-                                placeholder="姓名"
-                                className={styles.editInput}
-                              />
-                              <input
-                                type="text"
-                                value={tempRegistrationData.department}
-                                onChange={(e) => setTempRegistrationData(prev => ({ ...prev, department: e.target.value }))}
-                                placeholder="部門"
-                                className={styles.editInput}
-                              />
-                              <button onClick={(e) => { e.stopPropagation(); handleSaveRegistration(); }} className={styles.saveBtn}>儲存</button>
-                              <button onClick={(e) => { e.stopPropagation(); handleCancelRegistration(); }} className={styles.cancelBtn}>取消</button>
-                            </>
-                          ) : (
-                            <>
-                              <span className={styles.cardRegName}>{reg.name}</span>
-                              <span className={styles.cardRegDept}>({reg.department})</span>
-                              <button onClick={(e) => { e.stopPropagation(); handleEditRegistration(reg); }} className={styles.actionBtn}>編輯</button>
-                              <button onClick={(e) => { e.stopPropagation(); handleDeleteRegistration(reg.id); }} className={styles.actionBtnDelete}>刪除</button>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
                 <div className={styles.cardBottomArea}>
+                  {/* 空狀態提示（移到底部棕色區塊） */}
+                  {!isEditingDates && dateRegistrations.length === 0 && (
+                    <div className={styles.emptyRegistrationSpace}>
+                      <p className={styles.emptyText}>按下報名</p>
+                    </div>
+                  )}
+
+                  {/* 該日期的報名者列表（移到底部棕色區塊） */}
+                  {dateRegistrations.length > 0 && (
+                    <div className={styles.cardRegistrationsList} onClick={(e) => e.stopPropagation()}>
+                      {dateRegistrations.map((reg, index) => {
+                        const isEditingThis = editingRegistrationId === reg.id;
+                        return (
+                          <div key={reg.id} className={styles.cardRegistrationItem}>
+                            <span className={styles.cardRegNumber}>{index + 1}.</span>
+                            {isEditingThis ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={tempRegistrationData.name}
+                                  onChange={(e) => setTempRegistrationData(prev => ({ ...prev, name: e.target.value }))}
+                                  placeholder="姓名"
+                                  className={styles.editInput}
+                                />
+                                <input
+                                  type="text"
+                                  value={tempRegistrationData.department}
+                                  onChange={(e) => setTempRegistrationData(prev => ({ ...prev, department: e.target.value }))}
+                                  placeholder="部門"
+                                  className={styles.editInput}
+                                />
+                                <button onClick={(e) => { e.stopPropagation(); handleSaveRegistration(); }} className={styles.saveBtn}>儲存</button>
+                                <button onClick={(e) => { e.stopPropagation(); handleCancelRegistration(); }} className={styles.cancelBtn}>取消</button>
+                              </>
+                            ) : (
+                              <>
+                                <span className={styles.cardRegName}>{reg.name}</span>
+                                <span className={styles.cardRegDept}>({reg.department})</span>
+                                <button onClick={(e) => { e.stopPropagation(); handleEditRegistration(reg); }} className={styles.actionBtn}>編輯</button>
+                                <button onClick={(e) => { e.stopPropagation(); handleDeleteRegistration(reg.id); }} className={styles.actionBtnDelete}>刪除</button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   <div className={styles.cardBottomDivider} />
                   <button 
                     className={styles.registerButton}
