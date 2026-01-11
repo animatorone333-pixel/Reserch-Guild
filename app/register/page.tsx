@@ -239,9 +239,32 @@ export default function RegisterPage() {
     };
   }, []);
 
-  const ensureRegistrationsTable = async (): Promise<string> => {
+  type RegistrationsTarget = { table: string; eventCol: "event_date" | "date" };
+
+  const ensureRegistrationsTarget = async (): Promise<RegistrationsTarget> => {
     if (!supabase) throw new Error("Supabase client 未初始化");
-    if (registrationsTable) return registrationsTable;
+
+    // 若已選定資料表，仍重新確認欄位（避免 setState 非同步導致的 race）
+    if (registrationsTable) {
+      const tableName = registrationsTable;
+
+      const { error: eventDateError } = await supabase.from(tableName).select("event_date").limit(1);
+      if (!eventDateError) {
+        if (registrationsEventDateColumn !== "event_date") setRegistrationsEventDateColumn("event_date");
+        return { table: tableName, eventCol: "event_date" };
+      }
+
+      const { error: dateError } = await supabase.from(tableName).select("date").limit(1);
+      if (!dateError) {
+        if (registrationsEventDateColumn !== "date") setRegistrationsEventDateColumn("date");
+        return { table: tableName, eventCol: "date" };
+      }
+
+      throw new Error(
+        `資料表 public.${tableName} 找不到 event_date 或 date 欄位。\n` +
+          "請在 Supabase SQL Editor 執行 db/setup_registrations_complete.sql，或確認你現有資料表欄位名稱。"
+      );
+    }
 
     const candidates = ["registrations", "register"];
     let lastError: unknown = null;
@@ -275,14 +298,14 @@ export default function RegisterPage() {
       if (!eventDateError) {
         setRegistrationsTable(tableName);
         setRegistrationsEventDateColumn("event_date");
-        return tableName;
+        return { table: tableName, eventCol: "event_date" };
       }
 
       const { error: dateError } = await supabase.from(tableName).select("date").limit(1);
       if (!dateError) {
         setRegistrationsTable(tableName);
         setRegistrationsEventDateColumn("date");
-        return tableName;
+        return { table: tableName, eventCol: "date" };
       }
 
       lastError = eventDateError || dateError;
@@ -294,6 +317,11 @@ export default function RegisterPage() {
         "建議直接在 Supabase SQL Editor 執行 db/setup_registrations_complete.sql。" +
         extra
     );
+  };
+
+  const ensureRegistrationsTable = async (): Promise<string> => {
+    const target = await ensureRegistrationsTarget();
+    return target.table;
   };
 
   const ensureEventDatesTable = async (): Promise<boolean> => {
@@ -367,8 +395,7 @@ export default function RegisterPage() {
       setCards(nextCards);
 
       // 載入所有報名資料
-      const regsTable = await ensureRegistrationsTable();
-      const eventCol = registrationsEventDateColumn;
+      const { table: regsTable, eventCol } = await ensureRegistrationsTarget();
       const { data: regsData, error: regsError } = await supabase
         .from(regsTable)
         .select(`id, name, department, ${eventCol}, created_at`)
@@ -425,7 +452,7 @@ export default function RegisterPage() {
         try {
           setUseSupabase(true);
           setLoadError(null);
-          await ensureRegistrationsTable();
+          await ensureRegistrationsTarget();
           await checkEventDatesTable();
           await loadFromSupabase();
           setInitializedData(true);
@@ -474,7 +501,7 @@ export default function RegisterPage() {
       }
     };
     init();
-  }, [hasSupabase, supabase, initializedData, registrationsEventDateColumn]);
+  }, [hasSupabase, supabase, initializedData, registrationsTable]);
 
   // === Fallback: 從 API/localStorage 載入 ===
   const loadFromFallback = async () => {
@@ -656,8 +683,7 @@ export default function RegisterPage() {
         if (oldDate !== normalized && registeredDetails[oldDate]) {
           const detail = registeredDetails[oldDate];
           if (detail.id) {
-            const regsTable = await ensureRegistrationsTable();
-            const eventCol = registrationsEventDateColumn;
+            const { table: regsTable, eventCol } = await ensureRegistrationsTarget();
             await supabase
               .from(regsTable)
               .update({ [eventCol]: normalized })
@@ -770,8 +796,7 @@ export default function RegisterPage() {
     try {
       if (useSupabase && supabase) {
         // 使用 Supabase
-        const regsTable = await ensureRegistrationsTable();
-        const eventCol = registrationsEventDateColumn;
+        const { table: regsTable, eventCol } = await ensureRegistrationsTarget();
         const { error } = await supabase
           .from(regsTable)
           .insert({
