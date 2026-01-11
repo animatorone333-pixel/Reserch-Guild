@@ -54,6 +54,20 @@
 
 要真正自動部署到 Vercel，可在 Vercel UI 啟用 Git 整合，或在 CI 使用 Vercel Action（需 `VERCEL_TOKEN`）來觸發部署。
 
+### 一鍵同步（Supabase + Vercel）
+檔案：`.github/workflows/sync_prod.yml`
+
+功能：每次 push 到 `main` 時會依序：
+1) 用 `psql` 套用 repo 內的 SQL（建表 / RLS / grants）到 Supabase
+2) 成功後部署到 Vercel（prod）
+
+需要設定 GitHub repository secrets：
+- `SUPABASE_DATABASE_URL`：Supabase Postgres 連線字串（含密碼）
+- `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`：Vercel 部署所需
+- （可選）`SUPABASE_CHAT_POLICY`：預設 `A`（public insert）或 `B`（auth-only）
+
+也可以在 GitHub Actions 手動觸發 `Sync Supabase + Deploy Vercel`，並選擇 chat policy。
+
 ---
 
 ## 監控與告警建議

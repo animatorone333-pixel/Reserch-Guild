@@ -1,6 +1,9 @@
 -- Enable RLS and create permissive public insert policy
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS allow_public_insert ON public.messages;
+DROP POLICY IF EXISTS allow_select_public ON public.messages;
+
 CREATE POLICY allow_public_insert
   ON public.messages
   FOR INSERT

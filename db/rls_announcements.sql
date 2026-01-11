@@ -1,15 +1,24 @@
 -- 啟用 RLS
-ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+
+-- Grants
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.announcements TO anon, authenticated;
+GRANT USAGE, SELECT ON SEQUENCE public.announcements_id_seq TO anon, authenticated;
+
+-- 重跑安全：先移除舊政策
+DROP POLICY IF EXISTS "Allow public read access on announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Allow public update on announcements" ON public.announcements;
 
 -- 允許所有人讀取
 CREATE POLICY "Allow public read access on announcements"
-  ON announcements FOR SELECT
+  ON public.announcements FOR SELECT
   TO public
   USING (true);
 
 -- 允許所有人更新（可根據需求改為只允許管理員）
 CREATE POLICY "Allow public update on announcements"
-  ON announcements FOR UPDATE
+  ON public.announcements FOR UPDATE
   TO public
   USING (true)
   WITH CHECK (true);

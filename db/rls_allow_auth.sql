@@ -1,6 +1,9 @@
 -- Enable RLS and create authenticated-only insert policy
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS allow_insert_auth_users ON public.messages;
+DROP POLICY IF EXISTS allow_select_public ON public.messages;
+
 CREATE POLICY allow_insert_auth_users
   ON public.messages
   FOR INSERT

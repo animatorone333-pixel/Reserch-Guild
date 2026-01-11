@@ -47,6 +47,26 @@ interface RegistrationItem {
   created_at: string;
 }
 
+const isLikelySupabasePermissionError = (err: unknown) => {
+  const msg = (err && typeof err === "object" && "message" in err)
+    ? String((err as any).message || "")
+    : String(err || "");
+  const m = msg.toLowerCase();
+  return (
+    m.includes("permission denied") ||
+    m.includes("row-level security") ||
+    m.includes("row level security") ||
+    m.includes("violates row-level security") ||
+    m.includes("violates row level security") ||
+    m.includes("not allowed") ||
+    m.includes("insufficient_privilege")
+  );
+};
+
+const registrationsRlsHint =
+  "Supabase 權限/RLS 可能未設定完成：請在 Supabase SQL Editor 依序執行 db/create_registrations_table.sql、db/create_event_dates_table.sql、db/rls_registrations.sql（或直接跑 db/setup_registrations_complete.sql）。\n" +
+  "若你有自己手動開 RLS，務必包含 GRANT（含 registrations_id_seq / event_dates_id_seq 的 sequence 權限），否則會出現 permission denied。";
+
 // 預設日期卡片（每月前三個星期一）
 const defaultDateCards: CardData[] = [
   { date: "1/5", image: "/game_16.png" },
@@ -157,6 +177,15 @@ export default function RegisterPage() {
         setRegistrationsTable(tableName);
         return tableName;
       }
+
+      // 表可能存在，但被權限/RLS 擋住；這種情況要直接提示，而不是誤判成「找不到表」。
+      if (isLikelySupabasePermissionError(error)) {
+        throw new Error(
+          `可以連到 Supabase，但資料表 public.${tableName} 被權限/RLS 擋住，導致無法讀取/寫入。\n` +
+            registrationsRlsHint +
+            `\n（原始錯誤：${(error as any)?.message || String(error)}）`
+        );
+      }
     }
 
     throw new Error("找不到報名資料表：請建立 public.registrations（建議）或 public.register");
@@ -253,6 +282,7 @@ export default function RegisterPage() {
       const res = await fetch(SHEET_API_URL, { cache: "no-store" });
       if (!res.ok) {
         setRegisteredDetails(local);
+        setAllRegistrations([]);
         return;
       }
 
@@ -260,28 +290,62 @@ export default function RegisterPage() {
       const parsed: Record<string, RegisteredDetail> = {};
       const items = Array.isArray(data) ? data : Array.isArray((data as any).data) ? (data as any).data : [];
 
+      const fallbackRegistrations: RegistrationItem[] = [];
+
       items.forEach((item: any) => {
         if (!item) return;
         if (typeof item === "object" && !Array.isArray(item)) {
           const rawDate = item.date || item.Date || item["日期"] || item[0];
           const name = item.name || item.Name || item["姓名"] || item[1] || "";
           const department = item.department || item.Department || item["部門"] || item[2] || "";
+          const createdAt =
+            item.created_at ||
+            item.createdAt ||
+            item.timestamp ||
+            item.time ||
+            item["時間"] ||
+            new Date().toISOString();
+          const idCandidate = item.id ?? item["id"] ?? item["編號"];
+
           const dateKey = normalizeServerDateKey(rawDate);
           if (dateKey) parsed[dateKey] = { name: String(name || "").trim(), department: String(department || "").trim() };
+
+          fallbackRegistrations.push({
+            id:
+              typeof idCandidate === "number"
+                ? idCandidate
+                : typeof idCandidate === "string" && !Number.isNaN(Number(idCandidate))
+                  ? Number(idCandidate)
+                  : Date.now() + fallbackRegistrations.length,
+            name: String(name || "").trim(),
+            department: String(department || "").trim(),
+            event_date: dateKey,
+            created_at: String(createdAt || ""),
+          });
           return;
         }
         if (Array.isArray(item)) {
           const [rawDate, name, department] = item;
           const dateKey = normalizeServerDateKey(rawDate);
           if (dateKey) parsed[dateKey] = { name: String(name || "").trim(), department: String(department || "").trim() };
+
+          fallbackRegistrations.push({
+            id: Date.now() + fallbackRegistrations.length,
+            name: String(name || "").trim(),
+            department: String(department || "").trim(),
+            event_date: dateKey,
+            created_at: new Date().toISOString(),
+          });
         }
       });
 
       const final = { ...local, ...parsed };
       setRegisteredDetails(final);
+      setAllRegistrations(fallbackRegistrations);
     } catch (e) {
       console.error("Fallback 載入失敗:", e);
       setRegisteredDetails(local);
+      setAllRegistrations([]);
     }
   };
 
@@ -301,8 +365,11 @@ export default function RegisterPage() {
         }
       } else {
         setUseSupabase(false);
-        console.warn("Supabase 未設定或無效，報名功能已停用。請設定 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY");
-        setLoadError("Supabase 未設定，請聯絡管理員以啟用註冊功能。");
+        console.warn(
+          "Supabase 未設定或無效，改用 fallback /api/sheet。若要啟用即時同步與管理功能，請設定 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY"
+        );
+        setLoadError("Supabase 未設定，已改用 /api/sheet（Google 試算表）作為回退來源。");
+        await loadFromFallback();
       }
 
       setIsClient(true);
@@ -542,7 +609,12 @@ export default function RegisterPage() {
             event_date: formData.date
           });
 
-        if (error) throw error;
+        if (error) {
+          if (isLikelySupabasePermissionError(error)) {
+            throw new Error(registrationsRlsHint + `\n（原始錯誤：${(error as any)?.message || String(error)}）`);
+          }
+          throw error;
+        }
         
         alert("報名成功！");
         setShowForm(false);
@@ -551,8 +623,26 @@ export default function RegisterPage() {
         // Realtime 若未啟用，也能立即看到新增
         await loadFromSupabase();
       } else {
-        // Supabase is required for registrations
-        throw new Error("Supabase 未設定，無法提交報名。請聯絡管理員以啟用註冊功能。");
+        // Fallback: 走 /api/sheet（由 server route 代理到 Apps Script）
+        const res = await fetch(SHEET_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: formData.date,
+            name: formData.name,
+            department: formData.department,
+          }),
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(`Fallback API 錯誤：${res.status} ${text}`);
+        }
+
+        alert("報名成功！");
+        setShowForm(false);
+        setFormData(prev => ({ name: prev.name, department: prev.department, date: "" }));
+        await loadFromFallback();
       }
     } catch (error) {
       console.error("提交報名失敗:", error);
@@ -571,7 +661,7 @@ export default function RegisterPage() {
           position: 'fixed', 
           top: '10px', 
           right: '10px', 
-          background: hasSupabase ? (useSupabase ? '#4CAF50' : '#FF9800') : '#f44336',
+          background: hasSupabase ? (useSupabase ? '#4CAF50' : '#FF9800') : '#7E57C2',
           color: 'white',
           padding: '8px 16px',
           borderRadius: '20px',
@@ -579,7 +669,7 @@ export default function RegisterPage() {
           fontWeight: 'bold',
           zIndex: 1000
         }}>
-          {hasSupabase ? (useSupabase ? '🟢 Supabase' : '🟠 Supabase (初始化中)') : '🔴 Supabase 未設定'}
+          {hasSupabase ? (useSupabase ? '🟢 Supabase' : '🟠 Supabase (初始化中)') : '🟣 Fallback /api/sheet'}
         </div>
           {loadError && (
             <div style={{
@@ -677,7 +767,7 @@ export default function RegisterPage() {
                   <div className={styles.cardBottomDivider} />
                   <button 
                     className={styles.registerButton}
-                    disabled={isEditingDates || editingRegistrationId !== null || !hasSupabase} 
+                    disabled={isEditingDates || editingRegistrationId !== null} 
                     onClick={(e) => {
                       e.stopPropagation();
                       handleCardClick(card.date);

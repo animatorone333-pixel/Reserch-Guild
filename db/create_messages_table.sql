@@ -1,6 +1,6 @@
 -- SQL migration: create messages table for Supabase realtime chat
 
-CREATE TABLE public.messages (
+CREATE TABLE IF NOT EXISTS public.messages (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   text TEXT NOT NULL,
   nickname TEXT,

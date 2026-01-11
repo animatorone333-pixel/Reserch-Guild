@@ -1,5 +1,5 @@
 -- 建立首頁公告表
-CREATE TABLE IF NOT EXISTS announcements (
+CREATE TABLE IF NOT EXISTS public.announcements (
   id BIGSERIAL PRIMARY KEY,
   content TEXT DEFAULT '',
   updated_by TEXT DEFAULT 'admin',
@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS announcements (
 );
 
 -- 插入預設公告（只會有一筆記錄）
-INSERT INTO announcements (id, content, updated_by) VALUES
+INSERT INTO public.announcements (id, content, updated_by) VALUES
   (1, '💌最新公告
 歡迎來到研究公會！
 這裡是最新消息區域，
@@ -26,13 +26,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_announcements_updated_at ON public.announcements;
 CREATE TRIGGER update_announcements_updated_at
-  BEFORE UPDATE ON announcements
+  BEFORE UPDATE ON public.announcements
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
 -- 啟用 Realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE announcements;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.announcements;
+EXCEPTION
+  WHEN duplicate_object THEN
+    NULL;
+END $$;
 
 -- 新增註解
 COMMENT ON TABLE announcements IS '首頁公告資料表（只有一筆記錄 id=1）';

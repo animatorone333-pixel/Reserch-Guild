@@ -35,6 +35,11 @@ CREATE TRIGGER update_registrations_updated_at
 -- 4. 啟用 Row Level Security
 ALTER TABLE registrations ENABLE ROW LEVEL SECURITY;
 
+-- 4.1 權限（很常是「可以讀但不能寫」或「permission denied for sequence」的根因）
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.registrations TO anon, authenticated;
+GRANT USAGE, SELECT ON SEQUENCE public.registrations_id_seq TO anon, authenticated;
+
 -- 5. 刪除舊政策（如果存在）
 DROP POLICY IF EXISTS "Allow public read access on registrations" ON registrations;
 DROP POLICY IF EXISTS "Allow public insert on registrations" ON registrations;
@@ -94,6 +99,10 @@ CREATE TRIGGER update_event_dates_updated_at
 
 -- 11. 啟用 event_dates RLS
 ALTER TABLE event_dates ENABLE ROW LEVEL SECURITY;
+
+-- 11.1 權限
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.event_dates TO anon, authenticated;
+GRANT USAGE, SELECT ON SEQUENCE public.event_dates_id_seq TO anon, authenticated;
 
 -- 12. 刪除舊的 event_dates 政策
 DROP POLICY IF EXISTS "Allow public read access on event_dates" ON event_dates;
