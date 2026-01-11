@@ -207,6 +207,7 @@ export default function RegisterPage() {
   const [useSupabase, setUseSupabase] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [registrationsTable, setRegistrationsTable] = useState<string | null>(null);
+  const [registrationsEventDateColumn, setRegistrationsEventDateColumn] = useState<"event_date" | "date">("event_date");
   const [hasEventDatesTable, setHasEventDatesTable] = useState<boolean>(true);
 
   const [initializedData, setInitializedData] = useState(false);
@@ -245,29 +246,46 @@ export default function RegisterPage() {
     const candidates = ["registrations", "register"];
     let lastError: unknown = null;
     for (const tableName of candidates) {
-      const { error } = await supabase.from(tableName).select("id").limit(1);
-      if (!error) {
+      // 先確認表存在且可讀
+      const { error: idError } = await supabase.from(tableName).select("id").limit(1);
+      if (idError) {
+        lastError = idError;
+
+        if (isLikelySupabaseAuthOrConfigError(idError)) {
+          throw new Error(
+            "Supabase 連線/授權失敗：請確認 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY 是否正確，且指向同一個 Supabase 專案。" +
+              `\n（原始錯誤：${formatErrorMessage(idError)}）`
+          );
+        }
+
+        // 表可能存在，但被權限/RLS 擋住；這種情況要直接提示，而不是誤判成「找不到表」。
+        if (isLikelySupabasePermissionError(idError)) {
+          throw new Error(
+            `可以連到 Supabase，但資料表 public.${tableName} 被權限/RLS 擋住，導致無法讀取/寫入。\n` +
+              registrationsRlsHint +
+              `\n（原始錯誤：${formatErrorMessage(idError)}）`
+          );
+        }
+
+        continue;
+      }
+
+      // 再確認事件日期欄位是哪一個（避免 legacy register 表只有 date、沒有 event_date）
+      const { error: eventDateError } = await supabase.from(tableName).select("event_date").limit(1);
+      if (!eventDateError) {
         setRegistrationsTable(tableName);
+        setRegistrationsEventDateColumn("event_date");
         return tableName;
       }
 
-      lastError = error;
-
-      if (isLikelySupabaseAuthOrConfigError(error)) {
-        throw new Error(
-          "Supabase 連線/授權失敗：請確認 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY 是否正確，且指向同一個 Supabase 專案。" +
-            `\n（原始錯誤：${formatErrorMessage(error)}）`
-        );
+      const { error: dateError } = await supabase.from(tableName).select("date").limit(1);
+      if (!dateError) {
+        setRegistrationsTable(tableName);
+        setRegistrationsEventDateColumn("date");
+        return tableName;
       }
 
-      // 表可能存在，但被權限/RLS 擋住；這種情況要直接提示，而不是誤判成「找不到表」。
-      if (isLikelySupabasePermissionError(error)) {
-        throw new Error(
-          `可以連到 Supabase，但資料表 public.${tableName} 被權限/RLS 擋住，導致無法讀取/寫入。\n` +
-            registrationsRlsHint +
-            `\n（原始錯誤：${formatErrorMessage(error)}）`
-        );
-      }
+      lastError = eventDateError || dateError;
     }
 
     const extra = lastError ? `\n（最後一次錯誤：${formatErrorMessage(lastError)}）` : "";
@@ -350,9 +368,10 @@ export default function RegisterPage() {
 
       // 載入所有報名資料
       const regsTable = await ensureRegistrationsTable();
+      const eventCol = registrationsEventDateColumn;
       const { data: regsData, error: regsError } = await supabase
         .from(regsTable)
-        .select("id, name, department, event_date, created_at")
+        .select(`id, name, department, ${eventCol}, created_at`)
         .order("created_at", { ascending: true });
 
       if (regsError) throw regsError;
@@ -362,7 +381,7 @@ export default function RegisterPage() {
             id: Number(r.id),
             name: String(r.name || ""),
             department: String(r.department || ""),
-            event_date: String(r.event_date || ""),
+            event_date: String(r[eventCol] || ""),
             created_at: String(r.created_at || ""),
           }))
         : [];
@@ -455,7 +474,7 @@ export default function RegisterPage() {
       }
     };
     init();
-  }, [hasSupabase, supabase, initializedData]);
+  }, [hasSupabase, supabase, initializedData, registrationsEventDateColumn]);
 
   // === Fallback: 從 API/localStorage 載入 ===
   const loadFromFallback = async () => {
@@ -638,9 +657,10 @@ export default function RegisterPage() {
           const detail = registeredDetails[oldDate];
           if (detail.id) {
             const regsTable = await ensureRegistrationsTable();
+            const eventCol = registrationsEventDateColumn;
             await supabase
               .from(regsTable)
-              .update({ event_date: normalized })
+              .update({ [eventCol]: normalized })
               .eq('id', detail.id);
           }
         }
@@ -751,12 +771,13 @@ export default function RegisterPage() {
       if (useSupabase && supabase) {
         // 使用 Supabase
         const regsTable = await ensureRegistrationsTable();
+        const eventCol = registrationsEventDateColumn;
         const { error } = await supabase
           .from(regsTable)
           .insert({
             name: formData.name,
             department: formData.department,
-            event_date: formData.date
+            [eventCol]: formData.date
           });
 
         if (error) {
