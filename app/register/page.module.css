@@ -63,7 +63,7 @@
 }
 
 .cardBottomDivider {
-  width: 100%;
+  width: 92%;
   border-top: 3px solid #b8860b;
   margin: 10px 0 12px;
   opacity: 0.9;
@@ -503,9 +503,9 @@
 /* ========================================= */
 
 .cardRegistrationsList {
-  width: 100%;
+  width: 92%;
   box-sizing: border-box;
-  margin: 0;
+  margin: 0 auto;
   padding: 0 0 10px;
   display: flex;
   flex-direction: column;
@@ -587,9 +587,9 @@
 
 /* 空狀態提示：寬度同卡片內容區，避免超框 */
 .emptyRegistrationSpace {
-  width: 100%;
+  width: 92%;
   box-sizing: border-box;
-  margin: 0;
+  margin: 0 auto;
   padding: 0 0 10px;
   text-align: center;
 }
