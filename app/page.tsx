@@ -136,6 +136,7 @@ export default function Home() {
   const [announcementsLoaded, setAnnouncementsLoaded] = useState(false);
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
   const [draftAnnouncement, setDraftAnnouncement] = useState<string>("");
+  const [announcementId, setAnnouncementId] = useState<number | null>(null);
   
   // 全域登入使用者狀態
   const [currentUser, setCurrentUser] = useState<{
@@ -215,10 +216,12 @@ export default function Home() {
     if (!supabase) return;
 
     try {
+      // 查詢第一筆公告（按 id 排序）
       const { data, error } = await supabase
         .from('announcements')
         .select('*')
-        .eq('id', 1)
+        .order('id', { ascending: true })
+        .limit(1)
         .single();
 
       if (error) {
@@ -237,13 +240,16 @@ export default function Home() {
             "🔸歡迎推薦遊戲品項，請至桌遊投票區開盲盒!\n" +
             "🔸本月主題日_夜市人生，將舉行射擊遊戲!歡迎來練習!";
           
-          const { error: insertError } = await supabase
+          const { data: insertData, error: insertError } = await supabase
             .from('announcements')
-            .insert({ id: 1, content: defaultContent, updated_by: 'system' });
+            .insert({ content: defaultContent, updated_by: 'system' })
+            .select()
+            .single();
           
-          if (!insertError) {
+          if (!insertError && insertData) {
             setAnnouncements(defaultContent);
-            console.log("✅ 預設公告已插入並載入");
+            setAnnouncementId(insertData.id);
+            console.log("✅ 預設公告已插入並載入，id:", insertData.id);
             return;
           } else {
             console.error("❌ 插入預設公告失敗:", insertError);
@@ -255,7 +261,8 @@ export default function Home() {
 
       if (data) {
         setAnnouncements(data.content || '');
-        console.log("✅ 從 Supabase 載入公告成功");
+        setAnnouncementId(data.id);
+        console.log("✅ 從 Supabase 載入公告成功，id:", data.id);
       }
     } catch (error: any) {
       console.error("❌ 從 Supabase 載入公告失敗:", {
@@ -307,13 +314,13 @@ export default function Home() {
 
   // === Supabase Realtime 訂閱 ===
   useEffect(() => {
-    if (!useSupabase || !supabase) return;
+    if (!useSupabase || !supabase || !announcementId) return;
 
     const channel = supabase
       .channel('public:announcements')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'announcements', filter: 'id=eq.1' },
+        { event: '*', schema: 'public', table: 'announcements', filter: `id=eq.${announcementId}` },
         (payload) => {
           console.log('📡 Announcements 變更:', payload);
           if (payload.eventType === 'UPDATE' && payload.new) {
@@ -332,7 +339,7 @@ export default function Home() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [useSupabase, isEditingAnnouncement]);
+  }, [useSupabase, isEditingAnnouncement, announcementId]);
 
   // === localStorage 持久化（Fallback 模式） ===
   useEffect(() => {
@@ -362,14 +369,14 @@ export default function Home() {
     const value = draftAnnouncement;
     
     // 如果使用 Supabase，同步到資料庫
-    if (useSupabase && supabase) {
+    if (useSupabase && supabase && announcementId) {
       try {
-        console.log("🔄 開始更新公告到 Supabase...");
+        console.log("🔄 開始更新公告到 Supabase，id:", announcementId);
         
         const { data, error } = await supabase
           .from('announcements')
           .update({ content: value, updated_by: 'user' })
-          .eq('id', 1)
+          .eq('id', announcementId)
           .select();
         
         if (error) {
