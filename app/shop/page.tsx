@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import styles from "./page.module.css";
 import { useRouter } from "next/navigation";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
@@ -110,7 +110,27 @@ export default function ShopPage() {
   const [useSupabase, setUseSupabase] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
+  const [supabaseConfigSource, setSupabaseConfigSource] = useState<"build" | "runtime" | "none">(
+    initialHasSupabase ? "build" : "none"
+  );
+  const [supabaseUrlUsed, setSupabaseUrlUsed] = useState<string | null>(initialHasSupabase ? ENV_SUPABASE_URL : null);
+  const [debugMode, setDebugMode] = useState(false);
+
   const supabaseReady = hasSupabase && !!supabase;
+
+  const getProjectRefFromUrl = (url: string | null): string | null => {
+    if (!url) return null;
+    try {
+      const u = new URL(url);
+      const host = u.hostname || "";
+      // e.g. https://xxxx.supabase.co -> xxxx
+      const first = host.split(".")[0];
+      return first || null;
+    } catch {
+      return null;
+    }
+  };
+  const supabaseProjectRef = getProjectRefFromUrl(supabaseUrlUsed);
 
   // 若 build-time NEXT_PUBLIC_* 沒被內嵌，從 server runtime 取得設定並初始化 Supabase。
   useEffect(() => {
@@ -124,6 +144,8 @@ export default function ShopPage() {
         if (json?.hasSupabase && typeof json.url === "string" && typeof json.anonKey === "string") {
           setHasSupabase(true);
           setSupabase(createClient(json.url, json.anonKey));
+          setSupabaseConfigSource("runtime");
+          setSupabaseUrlUsed(json.url);
         }
       } catch {
         // ignore and keep fallback
@@ -135,8 +157,16 @@ export default function ShopPage() {
     };
   }, []);
 
+  useEffect(() => {
+    try {
+      setDebugMode(new URLSearchParams(window.location.search).get("debug") === "1");
+    } catch {
+      setDebugMode(false);
+    }
+  }, []);
+
   // === 從 Supabase 載入商品 ===
-  const loadFromSupabase = async () => {
+  const loadFromSupabase = useCallback(async () => {
     if (!supabase) return;
 
     try {
@@ -169,7 +199,7 @@ export default function ShopPage() {
       // Supabase-only：載入失敗就維持預設空資料，並讓錯誤在 console 可見
       setItems(createInitialItems());
     }
-  };
+  }, [supabase]);
 
   // === 初始化 ===
   useEffect(() => {
@@ -190,7 +220,7 @@ export default function ShopPage() {
     };
 
     initialize();
-  }, [hasSupabase, supabase, initializedData]);
+  }, [hasSupabase, supabase, initializedData, loadFromSupabase]);
 
   // === Supabase Realtime 訂閱 ===
   useEffect(() => {
@@ -211,7 +241,7 @@ export default function ShopPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [useSupabase]);
+  }, [useSupabase, supabase, loadFromSupabase]);
 
   // === 縮放效果 ===
   useEffect(() => {
@@ -403,7 +433,8 @@ export default function ShopPage() {
             const insertError = insertResults.find((r) => r.error)?.error;
             if (insertError) throw insertError;
           }
-
+          // 儲存後再讀回一次，避免「看起來沒同步」其實是本地狀態/快取問題
+          await loadFromSupabase();
           alert("✅ 資料已同步到 Supabase！");
         } catch (error) {
           console.error("❌ 儲存失敗:", error);
@@ -464,6 +495,33 @@ export default function ShopPage() {
 
   return (
     <main className={styles.wrapper}>
+      {debugMode && (
+        <div
+          style={{
+            position: "fixed",
+            left: 12,
+            top: 12,
+            zIndex: 1000,
+            maxWidth: 420,
+            padding: 12,
+            borderRadius: 12,
+            background: "rgba(0,0,0,0.72)",
+            color: "#fff",
+            fontSize: 12,
+            lineHeight: 1.4,
+          }}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>Shop Debug</div>
+          <div>supabaseReady: {String(supabaseReady)}</div>
+          <div>hasSupabase: {String(hasSupabase)}</div>
+          <div>configSource: {supabaseConfigSource}</div>
+          <div>projectRef: {supabaseProjectRef ?? "(unknown)"}</div>
+          <div style={{ opacity: 0.9, wordBreak: "break-all" }}>url: {supabaseUrlUsed ?? "(none)"}</div>
+          <div style={{ marginTop: 6, opacity: 0.9 }}>
+            若你在 Supabase Dashboard 看的不是這個 projectRef，就會覺得「沒同步」。
+          </div>
+        </div>
+      )}
       {!supabaseReady && (
         <div
           style={{
