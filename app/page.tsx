@@ -877,11 +877,10 @@ const creators = [
             <div
               style={{
                 position: "absolute",
-                bottom: "5%",
-                left: "50%",
-                transform: "translateX(-50%)",
+                bottom: "8%",
+                right: "8%",
                 display: "flex",
-                gap: "10px",
+                gap: "6px",
                 zIndex: 10,
               }}
             >
@@ -889,30 +888,30 @@ const creators = [
                 <button
                   onClick={handleStartEditAnnouncement}
                   style={{
-                    padding: "8px 16px",
-                    borderRadius: 8,
+                    padding: "4px 10px",
+                    borderRadius: 6,
                     border: "1px solid white",
                     background: "rgba(255, 255, 255, 0.35)",
                     color: "#222",
-                    fontSize: 14,
+                    fontSize: 11,
                     fontWeight: 700,
                     cursor: "pointer",
                     boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
                   }}
                 >
-                  編輯公告
+                  編輯
                 </button>
               ) : (
                 <>
                   <button
                     onClick={handleSaveAnnouncement}
                     style={{
-                      padding: "8px 16px",
-                      borderRadius: 8,
+                      padding: "4px 10px",
+                      borderRadius: 6,
                       border: "1px solid white",
                       background: "rgba(144, 238, 144, 0.55)",
                       color: "#1b1b1b",
-                      fontSize: 14,
+                      fontSize: 11,
                       fontWeight: 800,
                       cursor: "pointer",
                       boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
@@ -923,12 +922,12 @@ const creators = [
                   <button
                     onClick={handleCancelEditAnnouncement}
                     style={{
-                      padding: "8px 16px",
-                      borderRadius: 8,
+                      padding: "4px 10px",
+                      borderRadius: 6,
                       border: "1px solid white",
                       background: "rgba(255, 255, 255, 0.35)",
                       color: "#222",
-                      fontSize: 14,
+                      fontSize: 11,
                       fontWeight: 700,
                       cursor: "pointer",
                       boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
