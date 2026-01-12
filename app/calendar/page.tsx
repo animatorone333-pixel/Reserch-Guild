@@ -32,6 +32,8 @@ export default function CalendarPage() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [notesLoaded, setNotesLoaded] = useState(false);
   const [useSupabase, setUseSupabase] = useState(false);
+  const [isEditingCalendar, setIsEditingCalendar] = useState(false);
+  const [draftNotes, setDraftNotes] = useState<Record<string, string>>({});
 
   const [hasSupabase, setHasSupabase] = useState(initialHasSupabase);
   const [supabase, setSupabase] = useState<SupabaseClient | null>(initialSupabase);
@@ -407,19 +409,24 @@ export default function CalendarPage() {
                                 width: "100%",
                                 height: "20px",
                                 resize: "none",
-                                border: "none",
+                                border: isEditingCalendar ? "1px solid #ff6b6b" : "none",
                                 outline: "none",
                                 background: "transparent",
                                 color: "red",
                                 fontWeight: "bold",
+                                cursor: isEditingCalendar ? "text" : "default",
                               }}
                               className="calendar-note-textarea"
-                              value={dateKey ? notes[dateKey] || "" : ""}
+                              value={dateKey ? (isEditingCalendar ? draftNotes[dateKey] || "" : notes[dateKey] || "") : ""}
                               onChange={(e) => {
-                                if (!dateKey) return;
-                                handleNoteChange(dateKey, e.target.value);
+                                if (!dateKey || !isEditingCalendar) return;
+                                setDraftNotes(prev => ({
+                                  ...prev,
+                                  [dateKey]: e.target.value
+                                }));
                               }}
                               placeholder="行程..."
+                              readOnly={!isEditingCalendar}
                             />
                           </>
                         ) : null}
@@ -430,6 +437,94 @@ export default function CalendarPage() {
               ))}
             </tbody>
           </table>
+          
+          {/* 編輯按鈕區 */}
+          <div
+            style={{
+              marginTop: "20px",
+              display: "flex",
+              justifyContent: "center",
+              gap: "10px",
+            }}
+          >
+            {!isEditingCalendar ? (
+              <button
+                onClick={() => {
+                  setDraftNotes(notes);
+                  setIsEditingCalendar(true);
+                }}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  border: "1px solid white",
+                  background: "rgba(255, 255, 255, 0.35)",
+                  color: "#222",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                }}
+              >
+                編輯行事曆
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={async () => {
+                    // 儲存所有變更
+                    setNotes(draftNotes);
+                    
+                    // 同步到 Supabase
+                    if (useSupabase && supabase) {
+                      try {
+                        for (const [dateKey, noteText] of Object.entries(draftNotes)) {
+                          await updateNoteInSupabase(dateKey, noteText);
+                        }
+                        console.log("✅ 行事曆已同步到 Supabase");
+                      } catch (error) {
+                        console.error("❌ 同步 Supabase 失敗:", error);
+                        alert("儲存失敗（已暫存本機）");
+                      }
+                    }
+                    
+                    setIsEditingCalendar(false);
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: 8,
+                    border: "1px solid white",
+                    background: "rgba(144, 238, 144, 0.55)",
+                    color: "#1b1b1b",
+                    fontSize: 14,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  儲存
+                </button>
+                <button
+                  onClick={() => {
+                    setDraftNotes(notes);
+                    setIsEditingCalendar(false);
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: 8,
+                    border: "1px solid white",
+                    background: "rgba(255, 255, 255, 0.35)",
+                    color: "#222",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  取消
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
