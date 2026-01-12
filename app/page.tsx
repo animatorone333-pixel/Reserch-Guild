@@ -134,6 +134,8 @@ export default function Home() {
   const [announcements, setAnnouncements] = useState<string>("");
   const [useSupabase, setUseSupabase] = useState(false);
   const [announcementsLoaded, setAnnouncementsLoaded] = useState(false);
+  const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
+  const [draftAnnouncement, setDraftAnnouncement] = useState<string>("");
   
   // 全域登入使用者狀態
   const [currentUser, setCurrentUser] = useState<{
@@ -339,6 +341,61 @@ export default function Home() {
       console.warn("儲存首頁公告失敗", e);
     }
   }, [announcements, announcementsLoaded, useSupabase]);
+
+  // === 公告編輯功能 ===
+  const handleStartEditAnnouncement = () => {
+    setDraftAnnouncement(announcements);
+    setIsEditingAnnouncement(true);
+  };
+
+  const handleCancelEditAnnouncement = () => {
+    setDraftAnnouncement(announcements);
+    setIsEditingAnnouncement(false);
+  };
+
+  const handleSaveAnnouncement = async () => {
+    const value = draftAnnouncement;
+    setAnnouncements(value);
+    
+    // 如果使用 Supabase，同步到資料庫
+    if (useSupabase && supabase) {
+      try {
+        const { error } = await supabase
+          .from('announcements')
+          .update({ content: value })
+          .eq('id', 1);
+        
+        if (error) {
+          console.error("❌ 更新 Supabase 公告失敗:", error);
+          alert(`儲存失敗（已暫存本機）：${error.message}`);
+          // 降級到 localStorage
+          if (typeof window !== "undefined") {
+            localStorage.setItem("home_announcements_v1", value);
+          }
+        } else {
+          console.log("✅ 公告已同步到 Supabase");
+        }
+      } catch (err: any) {
+        console.error("❌ 更新失敗:", err);
+        alert(`儲存失敗（已暫存本機）：${err?.message || '未知錯誤'}`);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("home_announcements_v1", value);
+        }
+      }
+    } else {
+      // Fallback: 儲存到 localStorage
+      try {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("home_announcements_v1", value);
+        }
+      } catch (err) {
+        console.warn("儲存首頁公告失敗", err);
+        alert('儲存失敗，請稍後再試');
+      }
+    }
+    
+    setIsEditingAnnouncement(false);
+  };
 
   // 職業選擇器 (保持不變)
   const handlePrevJob = () => {
@@ -761,77 +818,126 @@ const creators = [
                 alignItems: "stretch",
               }}
             >
-              <textarea
-                value={announcements}
-                onChange={async (e) => {
-                  const value = e.target.value;
-                  // 樂觀更新
-                  setAnnouncements(value);
-                  
-                  // 如果使用 Supabase，同步到資料庫
-                  if (useSupabase && supabase) {
-                    try {
-                      const { error } = await supabase
-                        .from('announcements')
-                        .update({ content: value })
-                        .eq('id', 1);
-                      
-                      if (error) {
-                        console.error("❌ 更新 Supabase 公告失敗:", {
-                          message: error.message,
-                          details: error.details,
-                          hint: error.hint,
-                          code: error.code
-                        });
-                        throw error;
-                      }
-                      console.log("✅ 公告已同步到 Supabase");
-                    } catch (err: any) {
-                      console.error("❌ 更新失敗，降級到 localStorage:", err?.message);
-                      // 降級到 localStorage
-                      try {
-                        if (typeof window !== "undefined") {
-                          localStorage.setItem("home_announcements_v1", value);
-                        }
-                      } catch (localErr) {
-                        console.warn("localStorage 儲存也失敗", localErr);
-                      }
-                    }
-                  } else {
-                    // Fallback: 儲存到 localStorage
-                    try {
-                      if (typeof window !== "undefined") {
-                        localStorage.setItem("home_announcements_v1", value);
-                      }
-                    } catch (err) {
-                      console.warn("儲存首頁公告失敗", err);
-                    }
-                  }
-                }}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  padding: "10px 16px",
-                  boxSizing: "border-box",
-                  border: "none",
-                  resize: "none",
-                  outline: "none",
-                  // 一排文字一排線（固定 18px 行高）
-                  background:
-                    "repeating-linear-gradient(to bottom, " +
-                    "transparent 0px, " +
-                    "transparent 17px, " +
-                    "#5c3b1a 17px, " +
-                    "#5c3b1a 18px)",
-                  backgroundPosition: "0 8px",
-                  color: "black",
-                  fontSize: "10px",
-                  fontWeight: "bold",
-                  lineHeight: "18px",
-                  whiteSpace: "pre-wrap",
-                  overflowY: "auto",
-                }}
-              />
+              {isEditingAnnouncement ? (
+                <textarea
+                  value={draftAnnouncement}
+                  onChange={(e) => setDraftAnnouncement(e.target.value)}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    padding: "10px 16px",
+                    boxSizing: "border-box",
+                    border: "2px solid #ff6b6b",
+                    resize: "none",
+                    outline: "none",
+                    background:
+                      "repeating-linear-gradient(to bottom, " +
+                      "transparent 0px, " +
+                      "transparent 17px, " +
+                      "#5c3b1a 17px, " +
+                      "#5c3b1a 18px)",
+                    backgroundPosition: "0 8px",
+                    color: "black",
+                    fontSize: "10px",
+                    fontWeight: "bold",
+                    lineHeight: "18px",
+                    whiteSpace: "pre-wrap",
+                    overflowY: "auto",
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    padding: "10px 16px",
+                    boxSizing: "border-box",
+                    border: "none",
+                    background:
+                      "repeating-linear-gradient(to bottom, " +
+                      "transparent 0px, " +
+                      "transparent 17px, " +
+                      "#5c3b1a 17px, " +
+                      "#5c3b1a 18px)",
+                    backgroundPosition: "0 8px",
+                    color: "black",
+                    fontSize: "10px",
+                    fontWeight: "bold",
+                    lineHeight: "18px",
+                    whiteSpace: "pre-wrap",
+                    overflowY: "auto",
+                  }}
+                >
+                  {announcements}
+                </div>
+              )}
+            </div>
+            
+            {/* 編輯按鈕區 */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: "5%",
+                left: "50%",
+                transform: "translateX(-50%)",
+                display: "flex",
+                gap: "10px",
+                zIndex: 10,
+              }}
+            >
+              {!isEditingAnnouncement ? (
+                <button
+                  onClick={handleStartEditAnnouncement}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: 8,
+                    border: "1px solid white",
+                    background: "rgba(255, 255, 255, 0.35)",
+                    color: "#222",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  編輯公告
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleSaveAnnouncement}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: 8,
+                      border: "1px solid white",
+                      background: "rgba(144, 238, 144, 0.55)",
+                      color: "#1b1b1b",
+                      fontSize: 14,
+                      fontWeight: 800,
+                      cursor: "pointer",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                    }}
+                  >
+                    儲存
+                  </button>
+                  <button
+                    onClick={handleCancelEditAnnouncement}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: 8,
+                      border: "1px solid white",
+                      background: "rgba(255, 255, 255, 0.35)",
+                      color: "#222",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                    }}
+                  >
+                    取消
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
