@@ -88,23 +88,35 @@ export default function CalendarPage() {
 
   // === 更新備註到 Supabase ===
   const updateNoteInSupabase = async (dateKey: string, noteText: string) => {
-    if (!supabase) return;
+    if (!supabase) {
+      console.warn("⚠️ supabase client 不存在");
+      return;
+    }
 
     try {
+      console.log(`🔄 更新 Supabase: ${dateKey} = ${noteText}`);
+      
       // 使用 upsert 來新增或更新
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('calendar_notes')
         .upsert({
           date_key: dateKey,
           note_text: noteText,
-          user_id: 'guest' // 可根據實際登入使用者修改
+          user_id: 'guest'
         }, {
           onConflict: 'date_key'
-        });
+        })
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error(`❌ Supabase 錯誤:`, error);
+        throw error;
+      }
+      
+      console.log(`✅ Supabase 更新成功:`, data);
     } catch (error) {
       console.error("❌ 更新 Supabase 備註失敗:", error);
+      throw error;
     }
   };
 
@@ -471,19 +483,44 @@ export default function CalendarPage() {
               <>
                 <button
                   onClick={async () => {
+                    console.log("🔄 開始儲存行事曆...");
+                    console.log("useSupabase:", useSupabase);
+                    console.log("draftNotes:", draftNotes);
+                    
                     // 儲存所有變更
                     setNotes(draftNotes);
                     
                     // 同步到 Supabase
                     if (useSupabase && supabase) {
                       try {
+                        let savedCount = 0;
+                        // 只儲存有內容的行程
                         for (const [dateKey, noteText] of Object.entries(draftNotes)) {
-                          await updateNoteInSupabase(dateKey, noteText);
+                          if (noteText && noteText.trim()) {
+                            console.log(`儲存: ${dateKey} -> ${noteText}`);
+                            await updateNoteInSupabase(dateKey, noteText);
+                            savedCount++;
+                          }
                         }
-                        console.log("✅ 行事曆已同步到 Supabase");
+                        console.log(`✅ 行事曆已同步到 Supabase（${savedCount} 筆）`);
+                        if (savedCount > 0) {
+                          alert(`儲存成功！已同步 ${savedCount} 筆行程`);
+                        }
                       } catch (error) {
                         console.error("❌ 同步 Supabase 失敗:", error);
                         alert("儲存失敗（已暫存本機）");
+                      }
+                    } else {
+                      console.log("💾 使用 localStorage 儲存");
+                      // Fallback: 儲存到 localStorage
+                      try {
+                        if (typeof window !== "undefined") {
+                          localStorage.setItem(CALENDAR_NOTES_KEY, JSON.stringify(draftNotes));
+                          console.log("✅ 已儲存到 localStorage");
+                        }
+                      } catch (err) {
+                        console.warn("儲存首頁公告失敗", err);
+                        alert('儲存失敗，請稍後再試');
                       }
                     }
                     
