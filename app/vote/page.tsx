@@ -1022,7 +1022,7 @@ export default function VotePage() {
           style={{
             position: "absolute",
             left: "570px",
-            top: "650px",
+            top: "620px",
             width: "540px",
             transform: "scale(0.8)",
             transformOrigin: "left top",
@@ -1085,13 +1085,7 @@ export default function VotePage() {
 
           <div
             style={{
-              alignSelf: "center",
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#fff",
-              textShadow: "0 2px 6px rgba(0,0,0,0.8)",
-              opacity: 0.9,
-              pointerEvents: "none",
+              display: "none",
             }}
           >
             {useSupabase ? "🟢 Supabase 同步" : "🟡 本機暫存"}
