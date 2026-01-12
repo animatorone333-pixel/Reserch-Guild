@@ -13,10 +13,15 @@ const initialSupabase: SupabaseClient | null = initialHasSupabase
   : null;
 
 // Fallback API
-const SHEET_API_URL = "/api/shop"; 
 const GRID_SIZE = 12;
-const SHOP_ITEMS_STORAGE_KEY = "shop_page_items_v1";
 const STORAGE_BUCKET = "shop-images";
+
+const SHOP_SETUP_HINT =
+  "常見原因：RLS/權限未設定或 Storage bucket/policy 未建立。\n" +
+  "請確認已在 Supabase SQL Editor 依序執行：\n" +
+  "- db/create_shop_items_table.sql\n" +
+  "- db/rls_shop_items.sql\n" +
+  "並建立 Storage bucket：shop-images（含 INSERT/SELECT/UPDATE/DELETE policies）。";
 
 // 舞台基準尺寸
 const BASE_WIDTH = 1280;
@@ -45,30 +50,50 @@ const createInitialItems = (): ShopItem[] => {
   }));
 };
 
-// localStorage 載入函數（Fallback）
-const loadPersistedItems = (): ShopItem[] => {
-  if (typeof window === 'undefined') return createInitialItems();
-  
-  const storedJson = localStorage.getItem(SHOP_ITEMS_STORAGE_KEY);
-  if (storedJson) {
-    try {
-      const parsedItems: any[] = JSON.parse(storedJson);
-      
-      if (Array.isArray(parsedItems) && parsedItems.length === GRID_SIZE) {
-        return parsedItems.map((item, index) => ({
-          id: typeof item.id === "number" ? item.id : index,
-          position: index,
-          name: typeof item.name === "string" ? item.name : "",
-          image: null,
-          preview: typeof item.preview === "string" ? item.preview : null,
-          imageUrl: "",
-        }));
-      }
-    } catch (e) {
-      console.error("Failed to parse stored items:", e);
-    }
+const formatErrorMessage = (err: unknown): string => {
+  if (!err) return "未知錯誤";
+
+  if (typeof err === "string") return err;
+
+  const anyErr = err as any;
+
+  // Supabase/PostgREST error 常見欄位：message/details/hint/code
+  const message =
+    (typeof anyErr?.message === "string" && anyErr.message) ||
+    (typeof anyErr?.error_description === "string" && anyErr.error_description) ||
+    (typeof anyErr?.error === "string" && anyErr.error) ||
+    "";
+  const details = typeof anyErr?.details === "string" ? anyErr.details : "";
+  const hint = typeof anyErr?.hint === "string" ? anyErr.hint : "";
+  const code = typeof anyErr?.code === "string" ? anyErr.code : "";
+
+  const parts = [
+    code ? `code=${code}` : "",
+    message,
+    details ? `details=${details}` : "",
+    hint ? `hint=${hint}` : "",
+  ].filter(Boolean);
+
+  return parts.join("\n");
+};
+
+const buildShopSaveHint = (err: unknown): string | null => {
+  const msg = formatErrorMessage(err).toLowerCase();
+
+  if (
+    msg.includes("row-level security") ||
+    msg.includes("rls") ||
+    msg.includes("permission denied") ||
+    msg.includes("shop_items")
+  ) {
+    return SHOP_SETUP_HINT;
   }
-  return createInitialItems();
+
+  if (msg.includes("shop-images") || msg.includes("storage") || msg.includes("bucket")) {
+    return SHOP_SETUP_HINT;
+  }
+
+  return null;
 };
 
 export default function ShopPage() {
@@ -84,6 +109,8 @@ export default function ShopPage() {
   const [itemsLoaded, setItemsLoaded] = useState(false);
   const [useSupabase, setUseSupabase] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  const supabaseReady = hasSupabase && !!supabase;
 
   // 若 build-time NEXT_PUBLIC_* 沒被內嵌，從 server runtime 取得設定並初始化 Supabase。
   useEffect(() => {
@@ -139,7 +166,8 @@ export default function ShopPage() {
       }
     } catch (error) {
       console.error("❌ 從 Supabase 載入失敗:", error);
-      setItems(loadPersistedItems());
+      // Supabase-only：載入失敗就維持預設空資料，並讓錯誤在 console 可見
+      setItems(createInitialItems());
     }
   };
 
@@ -149,13 +177,13 @@ export default function ShopPage() {
       if (initializedData) return;
       if (hasSupabase && !supabase) return;
 
+      // Supabase-only：只允許 Supabase
       if (hasSupabase && supabase) {
         setUseSupabase(true);
         await loadFromSupabase();
       } else {
         setUseSupabase(false);
-        const loaded = loadPersistedItems();
-        setItems(loaded);
+        setItems(createInitialItems());
       }
       setItemsLoaded(true);
       setInitializedData(true);
@@ -184,19 +212,6 @@ export default function ShopPage() {
       supabase.removeChannel(channel);
     };
   }, [useSupabase]);
-
-  // === localStorage 持久化（Fallback） ===
-  useEffect(() => {
-    if (!itemsLoaded || useSupabase) return;
-    
-    const itemsToPersist = items.map(({ id, name, preview, position }) => ({ 
-      id, 
-      name, 
-      preview,
-      position 
-    }));
-    localStorage.setItem(SHOP_ITEMS_STORAGE_KEY, JSON.stringify(itemsToPersist));
-  }, [items, itemsLoaded, useSupabase]); 
 
   // === 縮放效果 ===
   useEffect(() => {
@@ -283,21 +298,34 @@ export default function ShopPage() {
       const imageUrl = await uploadImageToSupabase(file, index);
       
       if (imageUrl) {
-        // 更新資料庫
-        const { error } = await supabase
-          .from('shop_items')
-          .upsert({
-            position: index,
-            image_url: imageUrl,
-            item_name: items[index].name,
-            user_id: 'guest'
-          }, {
-            onConflict: 'position'
-          });
+        // 更新資料庫（用 UPDATE 取代 UPSERT：避免缺少 sequence 權限時就算只是更新也會失敗）
+        try {
+          const itemName = items[index]?.name ?? "";
+          const { data, error } = await supabase
+            .from('shop_items')
+            .update({
+              image_url: imageUrl,
+              item_name: itemName,
+              user_id: 'guest',
+            })
+            .eq('position', index)
+            .select('id');
 
-        if (error) {
-          console.error("❌ 更新資料庫失敗:", error);
-        } else {
+          if (error) throw error;
+
+          // 若該 position 沒有 seed row，update 會回傳空陣列：自動補 INSERT
+          if (Array.isArray(data) && data.length === 0) {
+            const { error: insertError } = await supabase
+              .from('shop_items')
+              .insert({
+                position: index,
+                image_url: imageUrl,
+                item_name: itemName,
+                user_id: 'guest',
+              });
+            if (insertError) throw insertError;
+          }
+
           // 更新本地狀態
           setItems((prev) => {
             const next = [...prev];
@@ -307,6 +335,10 @@ export default function ShopPage() {
             };
             return next;
           });
+        } catch (e) {
+          console.error("❌ 更新資料庫失敗:", e);
+          const extra = buildShopSaveHint(e);
+          alert(`❌ 圖片儲存到 Supabase 失敗：\n${formatErrorMessage(e)}${extra ? `\n\n${extra}` : ""}`);
         }
       }
     }
@@ -329,22 +361,54 @@ export default function ShopPage() {
       if (useSupabase && supabase) {
         setIsSubmitting(true);
         try {
-          const updates = items.map(item => ({
+          const updates = items.map((item) => ({
             position: item.position,
             item_name: item.name,
             image_url: item.imageUrl || '',
-            user_id: 'guest'
+            user_id: 'guest',
           }));
-          
-          const { error } = await supabase
-            .from('shop_items')
-            .upsert(updates, { onConflict: 'position' });
 
-          if (error) throw error;
+          // 用 UPDATE 逐筆寫入，避免 UPSERT 可能觸發 sequence 權限問題。
+          const results = await Promise.all(
+            updates.map((u) =>
+              supabase
+                .from('shop_items')
+                .update({ item_name: u.item_name, image_url: u.image_url, user_id: u.user_id })
+                .eq('position', u.position)
+                .select('id')
+            )
+          );
+
+          const firstError = results.find((r) => r.error)?.error;
+          if (firstError) throw firstError;
+
+          // 若 update 沒影響任何列（通常是沒有 seed row），自動補 INSERT。
+          const missing = results
+            .map((r, idx) => ({ idx, data: r.data }))
+            .filter((x) => Array.isArray(x.data) && x.data.length === 0)
+            .map((x) => updates[x.idx]);
+
+          if (missing.length > 0) {
+            const insertResults = await Promise.all(
+              missing.map((u) =>
+                supabase.from('shop_items').insert({
+                  position: u.position,
+                  item_name: u.item_name,
+                  image_url: u.image_url,
+                  user_id: u.user_id,
+                })
+              )
+            );
+
+            const insertError = insertResults.find((r) => r.error)?.error;
+            if (insertError) throw insertError;
+          }
+
           alert("✅ 資料已同步到 Supabase！");
         } catch (error) {
           console.error("❌ 儲存失敗:", error);
-          alert("❌ 儲存失敗，請稍後再試。");
+          const extra = buildShopSaveHint(error);
+          alert(`❌ 儲存失敗：\n${formatErrorMessage(error)}${extra ? `\n\n${extra}` : ""}`);
         } finally {
           setIsSubmitting(false);
         }
@@ -358,38 +422,8 @@ export default function ShopPage() {
 
   // === 送出（Fallback 模式使用） ===
   const handleSubmit = async () => {
-    if (useSupabase) {
-      alert("✅ 資料已即時同步到 Supabase！");
-      return;
-    }
-
-    // Fallback: 使用 Google Sheets API
-    setIsSubmitting(true);
-    try {
-      const formData = new FormData();
-      items.forEach((item, i) => {
-        formData.append(`item${i}_name`, item.name);
-        formData.append(`item${i}_image`, item.image || ""); 
-      });
-
-      const response = await fetch(SHEET_API_URL, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (response.ok) {
-        alert("✅ 已成功上傳到 Google Sheet！");
-      } else {
-        const errorText = await response.text();
-        console.error(`❌ 上傳失敗: HTTP ${response.status}`, errorText);
-        alert(`❌ 上傳失敗 (HTTP ${response.status})，請檢查後端服務。`);
-      }
-    } catch (error) {
-      console.error("❌ 上傳失敗", error);
-      alert("❌ 上傳失敗，請稍後再試。");
-    } finally {
-      setIsSubmitting(false);
-    }
+    // Supabase-only：不提供 fallback submit
+    alert("此頁面目前只支援 Supabase 模式，請先設定 Supabase。");
   };
 
   // === 清除所有欄位 ===
@@ -422,15 +456,38 @@ export default function ShopPage() {
         alert("❌ 清除失敗，請稍後再試");
       }
     } else {
-      // Fallback: 清除 localStorage
+      // Supabase-only：無 Supabase 時仍允許清空畫面，但不會寫入任何地方
       const empty = createInitialItems();
       setItems(empty);
-      localStorage.removeItem(SHOP_ITEMS_STORAGE_KEY);
     }
   };
 
   return (
     <main className={styles.wrapper}>
+      {!supabaseReady && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            background: "rgba(0,0,0,0.55)",
+            color: "#fff",
+            textAlign: "left",
+          }}
+        >
+          <div style={{ maxWidth: 720, background: "rgba(0,0,0,0.55)", padding: 18, borderRadius: 12 }}>
+            <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>需要設定 Supabase 才能使用商店</div>
+            <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, fontSize: 14 }}>
+              {"請先設定 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY，並完成 shop_items 與 Storage bucket 的設定。\n\n" +
+                SHOP_SETUP_HINT}
+            </div>
+          </div>
+        </div>
+      )}
       {/* 書本背景 */}
       <div
         style={{
@@ -561,26 +618,16 @@ export default function ShopPage() {
             style={{ 
               backgroundColor: isEditing ? (useSupabase ? '#4CAF50' : '#2196F3') : '#FF9800',
             }}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !supabaseReady}
           >
             {isEditing ? (useSupabase ? "儲存變更" : "完成編輯") : "編輯模式"}
           </button>
-
-          {/* 如果不是 Supabase 模式，顯示舊版送出按鈕 */}
-          {!useSupabase && (
-            <button
-              className={styles.submitBtn}
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? "上傳中..." : "送出"}
-            </button>
-          )}
 
           {/* 清除按鈕 */}
           <button
             className={styles.clearBtn}
             onClick={handleClearAll}
+            disabled={!supabaseReady}
           >
             清除欄位
           </button>
