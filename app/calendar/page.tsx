@@ -381,13 +381,15 @@ export default function CalendarPage() {
             display: "flex",
             flexDirection: "column",
             color: "#3b0d0dff",
+            paddingTop: "56px",
+            boxSizing: "border-box",
           }}
         >
           <table
             style={{
               width: "56%",
               height: "48%",
-              margin: "auto",
+              margin: "0 auto",
               borderCollapse: "collapse",
               tableLayout: "fixed",
               fontSize: `${14 / (scale || 1)}px`,
@@ -478,7 +480,12 @@ export default function CalendarPage() {
           {/* 編輯按鈕區 */}
           <div
             style={{
-              marginTop: "44px",
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 50,
+              paddingTop: "8px",
               display: "flex",
               justifyContent: "center",
               gap: "10px",
