@@ -44,6 +44,26 @@ export default function CalendarPage() {
   const [username, setUsername] = useState("訪客");
   const [avatar, setAvatar] = useState("/game_04.png");
 
+  const formatErrorMessage = (err: any) => {
+    if (!err) return "未知錯誤";
+    if (err instanceof Error) return err.message;
+    if (typeof err === "string") return err;
+
+    const maybeMessage = typeof err?.message === "string" ? err.message : "";
+    const parts: string[] = [];
+    if (maybeMessage) parts.push(maybeMessage);
+    if (typeof err?.code === "string" && err.code) parts.push(`code=${err.code}`);
+    if (typeof err?.details === "string" && err.details) parts.push(`details=${err.details}`);
+    if (typeof err?.hint === "string" && err.hint) parts.push(`hint=${err.hint}`);
+    if (parts.length > 0) return parts.join(" | ");
+
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  };
+
   // === 從 Supabase 載入備註 ===
   const loadFromSupabase = async () => {
     if (!supabase) return;
@@ -119,7 +139,7 @@ export default function CalendarPage() {
       if (error) throw error;
     } catch (error) {
       console.error("❌ 更新 Supabase 備註失敗:", error);
-      throw error;
+      throw new Error(formatErrorMessage(error));
     }
   };
 
@@ -365,12 +385,12 @@ export default function CalendarPage() {
         >
           <table
             style={{
-              width: "40%",
-              height: "35%",
+              width: "56%",
+              height: "48%",
               margin: "auto",
               borderCollapse: "collapse",
               tableLayout: "fixed",
-              fontSize: `${12 / (scale || 1)}px`,
+              fontSize: `${14 / (scale || 1)}px`,
             }}
           >
             <thead>
@@ -413,22 +433,24 @@ export default function CalendarPage() {
                         style={{
                           border: "1px solid rgba(0,0,0,0.2)",
                           verticalAlign: "top",
-                          padding: "2px",
+                          padding: "6px",
                         }}
                       >
                         {day > 0 && day <= daysInMonth ? (
                           <>
-                            <div style={{ fontWeight: "bold" }}>{day}</div>
+                            <div style={{ fontWeight: "bold", fontSize: `${16 / (scale || 1)}px` }}>{day}</div>
                             <textarea
                               style={{
                                 width: "100%",
-                                height: "20px",
+                                height: "44px",
                                 resize: "none",
                                 border: isEditingCalendar ? "1px solid #ff6b6b" : "none",
                                 outline: "none",
                                 background: "transparent",
                                 color: "red",
                                 fontWeight: "bold",
+                                fontSize: `${12 / (scale || 1)}px`,
+                                lineHeight: 1.2,
                                 cursor: isEditingCalendar ? "text" : "default",
                               }}
                               className="calendar-note-textarea"
@@ -456,7 +478,7 @@ export default function CalendarPage() {
           {/* 編輯按鈕區 */}
           <div
             style={{
-              marginTop: "20px",
+              marginTop: "44px",
               display: "flex",
               justifyContent: "center",
               gap: "10px",
@@ -499,14 +521,23 @@ export default function CalendarPage() {
                         let upserted = 0;
                         let deleted = 0;
 
-                        for (const [dateKey, noteText] of Object.entries(draftNotes)) {
-                          const trimmed = String(noteText ?? "").trim();
-                          if (trimmed === "") {
-                            // 清空代表刪除該日紀錄（避免 Supabase 留舊資料）
+                        // 只同步有變更的日期，避免對所有空白日期一直做 delete 造成不必要的錯誤/負擔
+                        const allKeys = new Set<string>([
+                          ...Object.keys(notes),
+                          ...Object.keys(draftNotes),
+                        ]);
+
+                        for (const dateKey of allKeys) {
+                          const beforeText = String((notes as any)[dateKey] ?? "");
+                          const afterText = String((draftNotes as any)[dateKey] ?? "");
+
+                          if (beforeText.trim() === afterText.trim()) continue;
+
+                          if (afterText.trim() === "") {
                             await updateNoteInSupabase(dateKey, "");
                             deleted++;
                           } else {
-                            await updateNoteInSupabase(dateKey, noteText);
+                            await updateNoteInSupabase(dateKey, afterText);
                             upserted++;
                           }
                         }
@@ -523,12 +554,7 @@ export default function CalendarPage() {
                           console.warn("⚠️ 本機暫存失敗", e);
                         }
 
-                        const msg =
-                          error instanceof Error
-                            ? error.message
-                            : typeof error === "string"
-                              ? error
-                              : "未知錯誤";
+                        const msg = formatErrorMessage(error);
                         alert(`儲存失敗（已暫存本機）\n原因：${msg}`);
                       }
                     } else {
