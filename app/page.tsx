@@ -313,12 +313,17 @@ export default function Home() {
       .channel('public:announcements')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'announcements' },
+        { event: '*', schema: 'public', table: 'announcements', filter: 'id=eq.1' },
         (payload) => {
           console.log('📡 Announcements 變更:', payload);
           if (payload.eventType === 'UPDATE' && payload.new) {
             const newData = payload.new as any;
-            setAnnouncements(newData.content || '');
+            const newContent = newData.content || '';
+            setAnnouncements(newContent);
+            // 如果不是在編輯模式，也更新草稿
+            if (!isEditingAnnouncement) {
+              setDraftAnnouncement(newContent);
+            }
           }
         }
       )
@@ -327,7 +332,7 @@ export default function Home() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [useSupabase]);
+  }, [useSupabase, isEditingAnnouncement]);
 
   // === localStorage 持久化（Fallback 模式） ===
   useEffect(() => {
@@ -355,15 +360,17 @@ export default function Home() {
 
   const handleSaveAnnouncement = async () => {
     const value = draftAnnouncement;
-    setAnnouncements(value);
     
     // 如果使用 Supabase，同步到資料庫
     if (useSupabase && supabase) {
       try {
-        const { error } = await supabase
+        console.log("🔄 開始更新公告到 Supabase...");
+        
+        const { data, error } = await supabase
           .from('announcements')
-          .update({ content: value })
-          .eq('id', 1);
+          .update({ content: value, updated_by: 'user' })
+          .eq('id', 1)
+          .select();
         
         if (error) {
           console.error("❌ 更新 Supabase 公告失敗:", error);
@@ -373,7 +380,9 @@ export default function Home() {
             localStorage.setItem("home_announcements_v1", value);
           }
         } else {
-          console.log("✅ 公告已同步到 Supabase");
+          console.log("✅ 公告已成功同步到 Supabase:", data);
+          // 更新本地狀態
+          setAnnouncements(value);
         }
       } catch (err: any) {
         console.error("❌ 更新失敗:", err);
@@ -384,6 +393,8 @@ export default function Home() {
       }
     } else {
       // Fallback: 儲存到 localStorage
+      console.log("💾 使用 localStorage 儲存公告");
+      setAnnouncements(value);
       try {
         if (typeof window !== "undefined") {
           localStorage.setItem("home_announcements_v1", value);
