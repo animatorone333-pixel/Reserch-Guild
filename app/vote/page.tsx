@@ -841,90 +841,7 @@ export default function VotePage() {
                     pointerEvents: "auto",
                   }}
                 >
-                  {editingGameIndex === itemIndex ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
-                      <div>{name}</div>
-                      <input
-                        type="text"
-                        value={(draftItems[itemIndex] ?? name)}
-                        onChange={(e) => handleDraftNameChange(itemIndex, e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          width: 220,
-                          maxWidth: 260,
-                          padding: "6px 10px",
-                          borderRadius: 10,
-                          border: "1px solid rgba(255,255,255,0.75)",
-                          background: "rgba(255,255,255,0.12)",
-                          color: "#fff",
-                          fontSize: 14,
-                          fontWeight: 800,
-                          textAlign: "center",
-                          outline: "none",
-                        }}
-                      />
-                      <div style={{ display: "flex", gap: 10 }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleSaveOne(itemIndex);
-                          }}
-                          style={{
-                            padding: "6px 12px",
-                            borderRadius: 10,
-                            border: "1px solid rgba(255,255,255,0.85)",
-                            background: "rgba(144, 238, 144, 0.55)",
-                            color: "#1b1b1b",
-                            fontSize: 12,
-                            fontWeight: 900,
-                            cursor: "pointer",
-                          }}
-                        >
-                          儲存
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCancelEditOne();
-                          }}
-                          style={{
-                            padding: "6px 12px",
-                            borderRadius: 10,
-                            border: "1px solid rgba(255,255,255,0.85)",
-                            background: "rgba(255, 255, 255, 0.25)",
-                            color: "#fff",
-                            fontSize: 12,
-                            fontWeight: 900,
-                            cursor: "pointer",
-                          }}
-                        >
-                          取消
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
-                      <div>{name}</div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartEditOne(itemIndex);
-                        }}
-                        style={{
-                          padding: "6px 12px",
-                          borderRadius: 10,
-                          border: "1px solid rgba(255,255,255,0.85)",
-                          background: "rgba(255, 255, 255, 0.25)",
-                          color: "#fff",
-                          fontSize: 12,
-                          fontWeight: 900,
-                          cursor: "pointer",
-                        }}
-                      >
-                        編輯
-                      </button>
-                    </div>
-                  )}
+                  {name}
                 </div>
               )}
             </div>
@@ -1033,7 +950,7 @@ export default function VotePage() {
           }}
         >
             {shuffledItems.map((itemIndex, i) => {
-              const canEditThis = isEditingNames || editingGameIndex === itemIndex;
+              const canEditThis = isEditingNames;
               const name = (canEditThis ? draftItems[itemIndex] : items[itemIndex]) ?? "";
               return (
             <div
@@ -1044,32 +961,33 @@ export default function VotePage() {
                 position: "relative",
               }}
             >
-              <img
-                src={`/score_${i + 1}.png`}
-                alt={name || `score_${i + 1}`}
-                style={{
-                  width: "100px",
-                  height: "100px",
-                  display: "block",
-                  margin: "0 auto",
-                }}
-              />
-              <span
-                style={{
-                  position: "absolute",
-                  right: "12px",
-                  bottom: "28px",
-                  fontSize: "28px",
-                  color: "#ffd700",
-                  fontWeight: "bold",
-                  textShadow: "0 2px 8px #333",
-                  borderRadius: "6px",
-                  padding: "2px 8px",
-                  pointerEvents: "none",
-                }}
-              >
-                {votes[i]}
-              </span>
+              <div style={{ position: "relative", width: "100px", height: "100px", margin: "0 auto" }}>
+                <img
+                  src={`/score_${i + 1}.png`}
+                  alt={name || `score_${i + 1}`}
+                  style={{
+                    width: "100px",
+                    height: "100px",
+                    display: "block",
+                  }}
+                />
+                <span
+                  style={{
+                    position: "absolute",
+                    right: "2px",
+                    bottom: "2px",
+                    fontSize: "28px",
+                    color: "#ffd700",
+                    fontWeight: "bold",
+                    textShadow: "0 2px 8px #333",
+                    borderRadius: "6px",
+                    padding: "2px 8px",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {votes[i]}
+                </span>
+              </div>
               <input
                 type="text"
                 value={name}
@@ -1094,70 +1012,6 @@ export default function VotePage() {
                 }}
                 placeholder={`遊戲 ${itemIndex + 1} 名稱`}
               />
-
-              {/* 單筆改名：編輯/儲存/取消（放在遊戲名稱下方） */}
-              {!isEditingNames && (
-                <div
-                  style={{
-                    marginTop: 8,
-                    display: "flex",
-                    justifyContent: "center",
-                    gap: 8,
-                    pointerEvents: "auto",
-                  }}
-                >
-                  {editingGameIndex === itemIndex ? (
-                    <>
-                      <button
-                        onClick={() => handleSaveOne(itemIndex)}
-                        style={{
-                          padding: "6px 10px",
-                          borderRadius: 10,
-                          border: "1px solid rgba(255,255,255,0.85)",
-                          background: "rgba(144, 238, 144, 0.55)",
-                          color: "#1b1b1b",
-                          fontSize: 12,
-                          fontWeight: 800,
-                          cursor: "pointer",
-                        }}
-                      >
-                        儲存
-                      </button>
-                      <button
-                        onClick={handleCancelEditOne}
-                        style={{
-                          padding: "6px 10px",
-                          borderRadius: 10,
-                          border: "1px solid rgba(255,255,255,0.85)",
-                          background: "rgba(255, 255, 255, 0.35)",
-                          color: "#222",
-                          fontSize: 12,
-                          fontWeight: 800,
-                          cursor: "pointer",
-                        }}
-                      >
-                        取消
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => handleStartEditOne(itemIndex)}
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 10,
-                        border: "1px solid rgba(255,255,255,0.85)",
-                        background: "rgba(255, 255, 255, 0.35)",
-                        color: "#222",
-                        fontSize: 12,
-                        fontWeight: 800,
-                        cursor: "pointer",
-                      }}
-                    >
-                      編輯
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
             );
           })}
