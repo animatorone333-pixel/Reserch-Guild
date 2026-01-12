@@ -242,7 +242,7 @@ export default function Home() {
           
           const { data: insertData, error: insertError } = await supabase
             .from('announcements')
-            .insert({ content: defaultContent, updated_by: 'system' })
+            .insert({ content: defaultContent })
             .select()
             .single();
           
@@ -375,7 +375,7 @@ export default function Home() {
         
         const { data, error } = await supabase
           .from('announcements')
-          .update({ content: value, updated_by: 'user' })
+          .update({ content: value })
           .eq('id', announcementId)
           .select();
         
