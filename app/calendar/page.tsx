@@ -308,7 +308,8 @@ export default function CalendarPage() {
         borderRadius: '20px',
         fontSize: '12px',
         fontWeight: 'bold',
-        zIndex: 1000
+        zIndex: 1000,
+        display: 'none'
       }}>
         {useSupabase ? '🟢 Supabase' : '🟡 LocalStorage'}
       </div>
