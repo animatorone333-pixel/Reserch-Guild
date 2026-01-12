@@ -83,6 +83,7 @@ export default function ShopPage() {
   const [scale, setScale] = useState(1);
   const [itemsLoaded, setItemsLoaded] = useState(false);
   const [useSupabase, setUseSupabase] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   // 若 build-time NEXT_PUBLIC_* 沒被內嵌，從 server runtime 取得設定並初始化 Supabase。
   useEffect(() => {
@@ -312,30 +313,46 @@ export default function ShopPage() {
   };
 
   // === 處理名稱變更 ===
-  const handleNameChange = async (index: number, value: string) => {
-    // 樂觀更新
+  const handleNameChange = (index: number, value: string) => {
+    // 僅更新本地狀態，儲存變更時再同步
     setItems(prev => {
       const next = [...prev];
       next[index].name = value;
       return next;
     });
+  };
 
-    // 如果使用 Supabase，同步到資料庫
-    if (useSupabase && supabase) {
-      const { error } = await supabase
-        .from('shop_items')
-        .upsert({
-          position: index,
-          item_name: value,
-          image_url: items[index].imageUrl || '',
-          user_id: 'guest'
-        }, {
-          onConflict: 'position'
-        });
+  // === 切換編輯模式 / 儲存 ===
+  const handleToggleEdit = async () => {
+    if (isEditing) {
+      // 從編輯模式切換回檢視模式 -> 執行儲存
+      if (useSupabase && supabase) {
+        setIsSubmitting(true);
+        try {
+          const updates = items.map(item => ({
+            position: item.position,
+            item_name: item.name,
+            image_url: item.imageUrl || '',
+            user_id: 'guest'
+          }));
+          
+          const { error } = await supabase
+            .from('shop_items')
+            .upsert(updates, { onConflict: 'position' });
 
-      if (error) {
-        console.error("❌ 更新名稱失敗:", error);
+          if (error) throw error;
+          alert("✅ 資料已同步到 Supabase！");
+        } catch (error) {
+          console.error("❌ 儲存失敗:", error);
+          alert("❌ 儲存失敗，請稍後再試。");
+        } finally {
+          setIsSubmitting(false);
+        }
       }
+      setIsEditing(false);
+    } else {
+      // 進入編輯模式
+      setIsEditing(true);
     }
   };
 
@@ -414,22 +431,6 @@ export default function ShopPage() {
 
   return (
     <main className={styles.wrapper}>
-      {/* 資料來源指示器 */}
-      <div style={{ 
-        position: 'fixed', 
-        top: '10px', 
-        right: '10px', 
-        background: useSupabase ? '#4CAF50' : '#FF9800',
-        color: 'white',
-        padding: '8px 16px',
-        borderRadius: '20px',
-        fontSize: '12px',
-        fontWeight: 'bold',
-        zIndex: 1000
-      }}>
-        {useSupabase ? '🟢 Supabase' : '🟡 Fallback'}
-      </div>
-
       {/* 書本背景 */}
       <div
         style={{
@@ -466,33 +467,73 @@ export default function ShopPage() {
             <div key={i} className={styles.card}>
               <div className={styles.imageBox}>
                 {item.preview || item.imageUrl ? (
-                  <img 
-                    src={item.preview || item.imageUrl} 
-                    alt="預覽" 
-                    className={styles.preview} 
-                  />
-                ) : (
-                  <label className={styles.uploadLabel}>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        if (e.target.files?.[0]) {
-                          handleImageChange(i, e.target.files[0]);
-                        }
-                      }}
-                      hidden
+                  <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                    <img 
+                      src={item.preview || item.imageUrl} 
+                      alt="預覽" 
+                      className={styles.preview} 
                     />
-                    上傳圖片
-                  </label>
+                    {isEditing && (
+                      <label 
+                        className={styles.uploadLabel} 
+                        style={{ 
+                          position: 'absolute', 
+                          bottom: 0, 
+                          left: 0, 
+                          right: 0, 
+                          top: 0, 
+                          opacity: 0, 
+                          cursor: 'pointer' 
+                        }}
+                        title="點擊更換圖片"
+                      >
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) {
+                              handleImageChange(i, e.target.files[0]);
+                            }
+                          }}
+                          hidden
+                        />
+                      </label>
+                    )}
+                  </div>
+                ) : (
+                  isEditing ? (
+                    <label className={styles.uploadLabel}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          if (e.target.files?.[0]) {
+                            handleImageChange(i, e.target.files[0]);
+                          }
+                        }}
+                        hidden
+                      />
+                      上傳圖片
+                    </label>
+                  ) : (
+                    <div className={styles.uploadLabel} style={{ cursor: 'default', opacity: 0.5 }}>
+                      尚無商品
+                    </div>
+                  )
                 )}
               </div>
               <input
                 type="text"
-                placeholder="請輸入名稱..."
+                placeholder={isEditing ? "請輸入名稱..." : ""}
                 value={item.name}
                 onChange={(e) => handleNameChange(i, e.target.value)}
                 className={styles.nameInput}
+                disabled={!isEditing}
+                style={{
+                  backgroundColor: isEditing ? 'white' : 'transparent',
+                  border: isEditing ? '1px solid #ccc' : 'none',
+                  textAlign: 'center'
+                }}
               />
             </div>
           ))}
@@ -506,8 +547,26 @@ export default function ShopPage() {
             left: "50%",
             bottom: "40px",
             transform: "translateX(-50%)",
+            zIndex: 100,
+            display: "flex",
+            gap: "10px",
+            width: "100%",
+            justifyContent: "center"
           }}
         >
+          {/* 編輯模式按鈕 */}
+          <button
+            className={styles.submitBtn}
+            onClick={handleToggleEdit}
+            style={{ 
+              backgroundColor: isEditing ? (useSupabase ? '#4CAF50' : '#2196F3') : '#FF9800',
+            }}
+            disabled={isSubmitting}
+          >
+            {isEditing ? (useSupabase ? "儲存變更" : "完成編輯") : "編輯模式"}
+          </button>
+
+          {/* 如果不是 Supabase 模式，顯示舊版送出按鈕 */}
           {!useSupabase && (
             <button
               className={styles.submitBtn}
@@ -517,12 +576,16 @@ export default function ShopPage() {
               {isSubmitting ? "上傳中..." : "送出"}
             </button>
           )}
+
+          {/* 清除按鈕 */}
           <button
             className={styles.clearBtn}
             onClick={handleClearAll}
           >
             清除欄位
           </button>
+
+          {/* 回首頁按鈕 */}
           <button
             className={styles.homeBtn}
             onClick={() => router.push("/")}
