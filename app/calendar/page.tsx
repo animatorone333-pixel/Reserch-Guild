@@ -51,13 +51,13 @@ export default function CalendarPage() {
     try {
       const { data, error } = await supabase
         .from('calendar_notes')
-        .select('*');
+        .select('date_key,note_text');
 
       if (error) throw error;
 
       if (data) {
         const notesMap: Record<string, string> = {};
-        data.forEach(item => {
+        data.forEach((item: any) => {
           notesMap[item.date_key] = item.note_text || '';
         });
         setNotes(notesMap);
@@ -87,6 +87,7 @@ export default function CalendarPage() {
   };
 
   // === 更新備註到 Supabase ===
+  // 備註：`updated_at` 由 DB trigger 自動維護，不需要 client 端手動寫入。
   const updateNoteInSupabase = async (dateKey: string, noteText: string) => {
     if (!supabase) {
       console.warn("⚠️ supabase client 不存在");
@@ -94,26 +95,28 @@ export default function CalendarPage() {
     }
 
     try {
-      console.log(`🔄 更新 Supabase: ${dateKey} = ${noteText}`);
-      
-      // 使用 upsert 來新增或更新
-      const { data, error } = await supabase
+      const trimmed = (noteText ?? "").trim();
+
+      if (trimmed === "") {
+        const { error } = await supabase
+          .from('calendar_notes')
+          .delete()
+          .eq('date_key', dateKey);
+        if (error) throw error;
+        return;
+      }
+
+      const { error } = await supabase
         .from('calendar_notes')
         .upsert({
           date_key: dateKey,
           note_text: noteText,
-          user_id: 'guest'
+          user_id: isLoggedIn ? username : 'guest',
         }, {
           onConflict: 'date_key'
-        })
-        .select();
+        });
 
-      if (error) {
-        console.error(`❌ Supabase 錯誤:`, error);
-        throw error;
-      }
-      
-      console.log(`✅ Supabase 更新成功:`, data);
+      if (error) throw error;
     } catch (error) {
       console.error("❌ 更新 Supabase 備註失敗:", error);
       throw error;
@@ -493,22 +496,40 @@ export default function CalendarPage() {
                     // 同步到 Supabase
                     if (useSupabase && supabase) {
                       try {
-                        let savedCount = 0;
-                        // 只儲存有內容的行程
+                        let upserted = 0;
+                        let deleted = 0;
+
                         for (const [dateKey, noteText] of Object.entries(draftNotes)) {
-                          if (noteText && noteText.trim()) {
-                            console.log(`儲存: ${dateKey} -> ${noteText}`);
+                          const trimmed = String(noteText ?? "").trim();
+                          if (trimmed === "") {
+                            // 清空代表刪除該日紀錄（避免 Supabase 留舊資料）
+                            await updateNoteInSupabase(dateKey, "");
+                            deleted++;
+                          } else {
                             await updateNoteInSupabase(dateKey, noteText);
-                            savedCount++;
+                            upserted++;
                           }
                         }
-                        console.log(`✅ 行事曆已同步到 Supabase（${savedCount} 筆）`);
-                        if (savedCount > 0) {
-                          alert(`儲存成功！已同步 ${savedCount} 筆行程`);
-                        }
+
+                        alert(`儲存成功！已同步（新增/更新 ${upserted} 筆，刪除 ${deleted} 筆）`);
                       } catch (error) {
                         console.error("❌ 同步 Supabase 失敗:", error);
-                        alert("儲存失敗（已暫存本機）");
+                        // 真的做本機暫存（避免使用者以為已保存但重新整理就消失）
+                        try {
+                          if (typeof window !== "undefined") {
+                            localStorage.setItem(CALENDAR_NOTES_KEY, JSON.stringify(draftNotes));
+                          }
+                        } catch (e) {
+                          console.warn("⚠️ 本機暫存失敗", e);
+                        }
+
+                        const msg =
+                          error instanceof Error
+                            ? error.message
+                            : typeof error === "string"
+                              ? error
+                              : "未知錯誤";
+                        alert(`儲存失敗（已暫存本機）\n原因：${msg}`);
                       }
                     } else {
                       console.log("💾 使用 localStorage 儲存");
