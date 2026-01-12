@@ -381,18 +381,16 @@ export default function CalendarPage() {
             display: "flex",
             flexDirection: "column",
             color: "#3b0d0dff",
-            paddingTop: "56px",
-            boxSizing: "border-box",
           }}
         >
           <table
             style={{
-              width: "56%",
-              height: "48%",
-              margin: "0 auto",
+              width: "40%",
+              height: "35%",
+              margin: "auto",
               borderCollapse: "collapse",
               tableLayout: "fixed",
-              fontSize: `${14 / (scale || 1)}px`,
+              fontSize: `${12 / (scale || 1)}px`,
             }}
           >
             <thead>
@@ -435,24 +433,22 @@ export default function CalendarPage() {
                         style={{
                           border: "1px solid rgba(0,0,0,0.2)",
                           verticalAlign: "top",
-                          padding: "6px",
+                          padding: "2px",
                         }}
                       >
                         {day > 0 && day <= daysInMonth ? (
                           <>
-                            <div style={{ fontWeight: "bold", fontSize: `${16 / (scale || 1)}px` }}>{day}</div>
+                            <div style={{ fontWeight: "bold" }}>{day}</div>
                             <textarea
                               style={{
                                 width: "100%",
-                                height: "44px",
+                                height: "20px",
                                 resize: "none",
                                 border: isEditingCalendar ? "1px solid #ff6b6b" : "none",
                                 outline: "none",
                                 background: "transparent",
                                 color: "red",
                                 fontWeight: "bold",
-                                fontSize: `${12 / (scale || 1)}px`,
-                                lineHeight: 1.2,
                                 cursor: isEditingCalendar ? "text" : "default",
                               }}
                               className="calendar-note-textarea"
@@ -477,20 +473,93 @@ export default function CalendarPage() {
             </tbody>
           </table>
           
-          {/* 編輯按鈕區 */}
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              zIndex: 50,
-              paddingTop: "8px",
-              display: "flex",
-              justifyContent: "center",
-              gap: "10px",
-            }}
-          >
+
+        </div>
+      </div>
+
+      {/* === 舞台 B：頭像區（登入判斷） === */}
+      <div
+        style={{
+          position: "absolute",
+          top: 10,
+          left: 10,
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+        }}
+      >
+        <div
+          style={{
+            width: "200px",
+            height: "80px",
+            backgroundImage: "url('/game_03.png')",
+            backgroundSize: "cover",
+            borderRadius: "8px",
+            padding: "0 10px 0 46px",
+            display: "flex",
+            alignItems: "center",
+            color: "white",
+            position: "relative",
+          }}
+        >
+          {isLoggedIn ? (
+            <>
+              <img
+                src={avatar || "/game_04.png"} 
+                alt="頭像"  
+                style={{
+                  position: "absolute",
+                  left: "14px",
+                  top: "18px",
+                  width: "41px",
+                  height: "41px",
+                  borderRadius: "50%",
+                }}
+              />
+              <div style={{ marginLeft: "60px", fontWeight: "bold" }}>
+                {username}
+              </div>
+            </>
+          ) : (
+            <>
+              <div
+                style={{
+                  position: "absolute",
+                  left: "14px",
+                  top: "18px",
+                  width: "41px",
+                  height: "41px",
+                  borderRadius: "50%",
+                  backgroundColor: "#333",
+                  color: "white",
+                  fontSize: "20px",
+                  fontWeight: "bold",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                訪
+              </div>
+              <div style={{ marginLeft: "60px", fontWeight: "bold" }}>訪客</div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 編輯按鈕區 - 移至回首頁按鈕上方 */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "80px",
+          left: "50%",
+          transform: `translateX(-50%) scale(${scale})`,
+          transformOrigin: "bottom center",
+          zIndex: 50,
+          display: "flex",
+          justifyContent: "center",
+          gap: "10px",
+        }}
+      >
             {!isEditingCalendar ? (
               <button
                 onClick={() => {
@@ -615,77 +684,6 @@ export default function CalendarPage() {
                 </button>
               </>
             )}
-          </div>
-        </div>
-      </div>
-
-      {/* === 舞台 B：頭像區（登入判斷） === */}
-      <div
-        style={{
-          position: "absolute",
-          top: 10,
-          left: 10,
-          transform: `scale(${scale})`,
-          transformOrigin: "top left",
-        }}
-      >
-        <div
-          style={{
-            width: "200px",
-            height: "80px",
-            backgroundImage: "url('/game_03.png')",
-            backgroundSize: "cover",
-            borderRadius: "8px",
-            padding: "0 10px 0 46px",
-            display: "flex",
-            alignItems: "center",
-            color: "white",
-            position: "relative",
-          }}
-        >
-          {isLoggedIn ? (
-            <>
-              <img
-                src={avatar || "/game_04.png"} 
-                alt="頭像"  
-                style={{
-                  position: "absolute",
-                  left: "14px",
-                  top: "18px",
-                  width: "41px",
-                  height: "41px",
-                  borderRadius: "50%",
-                }}
-              />
-              <div style={{ marginLeft: "60px", fontWeight: "bold" }}>
-                {username}
-              </div>
-            </>
-          ) : (
-            <>
-              <div
-                style={{
-                  position: "absolute",
-                  left: "14px",
-                  top: "18px",
-                  width: "41px",
-                  height: "41px",
-                  borderRadius: "50%",
-                  backgroundColor: "#333",
-                  color: "white",
-                  fontSize: "20px",
-                  fontWeight: "bold",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                訪
-              </div>
-              <div style={{ marginLeft: "60px", fontWeight: "bold" }}>訪客</div>
-            </>
-          )}
-        </div>
       </div>
 
       {/* === 舞台 C：回首頁按鈕 === */}
