@@ -891,20 +891,60 @@ const creators = [
               )}
             </div>
             
-            {/* 編輯按鈕區 */}
-            <div
-              style={{
-                position: "absolute",
-                bottom: "3%",
-                right: "8%",
-                display: "flex",
-                gap: "6px",
-                zIndex: 10,
-              }}
-            >
-              {!isEditingAnnouncement ? (
+          </div>
+
+          {/* 編輯按鈕區 - 移至公告欄下方 */}
+          <div
+            style={{
+              position: "absolute",
+              top: "535px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: "min(600px, 92vw)",
+              display: "flex",
+              justifyContent: "flex-end",
+              paddingRight: "8%",
+              gap: "6px",
+              zIndex: 10,
+            }}
+          >
+            {!isEditingAnnouncement ? (
+              <button
+                onClick={handleStartEditAnnouncement}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  border: "1px solid white",
+                  background: "rgba(255, 255, 255, 0.35)",
+                  color: "#222",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                }}
+              >
+                編輯
+              </button>
+            ) : (
+              <>
                 <button
-                  onClick={handleStartEditAnnouncement}
+                  onClick={handleSaveAnnouncement}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    border: "1px solid white",
+                    background: "rgba(144, 238, 144, 0.55)",
+                    color: "#1b1b1b",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  儲存
+                </button>
+                <button
+                  onClick={handleCancelEditAnnouncement}
                   style={{
                     padding: "4px 10px",
                     borderRadius: 6,
@@ -917,45 +957,10 @@ const creators = [
                     boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
                   }}
                 >
-                  編輯
+                  取消
                 </button>
-              ) : (
-                <>
-                  <button
-                    onClick={handleSaveAnnouncement}
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: 6,
-                      border: "1px solid white",
-                      background: "rgba(144, 238, 144, 0.55)",
-                      color: "#1b1b1b",
-                      fontSize: 11,
-                      fontWeight: 800,
-                      cursor: "pointer",
-                      boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-                    }}
-                  >
-                    儲存
-                  </button>
-                  <button
-                    onClick={handleCancelEditAnnouncement}
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: 6,
-                      border: "1px solid white",
-                      background: "rgba(255, 255, 255, 0.35)",
-                      color: "#222",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-                    }}
-                  >
-                    取消
-                  </button>
-                </>
-              )}
-            </div>
+              </>
+            )}
           </div>
 
 
