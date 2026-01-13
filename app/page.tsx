@@ -895,7 +895,7 @@ const creators = [
             <div
               style={{
                 position: "absolute",
-                bottom: "8%",
+                bottom: "3%",
                 right: "8%",
                 display: "flex",
                 gap: "6px",
