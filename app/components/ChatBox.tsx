@@ -206,7 +206,17 @@ export default function ChatBox({
       avatar = guestIdentity.avatar;
     } else {
       // 第一次發言的訪客：產生一個路人編號並記住
-      const id = guestCounter++;
+      
+      // 雙重確認：掃描目前的 messages 確保不與現有人物撞名
+      // (防止 fetchMessages 尚未更新 guestCounter 或其他併發狀況)
+      let id = guestCounter;
+      const existingNicknames = new Set(messages.map(m => m.nickname));
+      while (existingNicknames.has(`路人${id}`)) {
+        id++;
+      }
+      // 更新全域計數器
+      guestCounter = id + 1;
+
       nickname = `路人${id}`;
       avatar = `${id}`; // 數字直接當頭像
 
