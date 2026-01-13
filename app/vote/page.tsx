@@ -659,7 +659,7 @@ export default function VotePage() {
 
   // ======== 這裡開始是畫面 ========
   // 以背景為容器的提示文字
-  const BG_TEXT_TOP_PX = 24;        // 固定距離「背景頂端」的基準 px
+  const BG_TEXT_TOP_PX = 10;        // 固定距離「背景頂端」的基準 px
   const TEXT_BASE_WIDTH = 900;
   const TEXT_BASE_FONT = 22;
 
@@ -738,8 +738,8 @@ export default function VotePage() {
           position: "absolute",
           // 以「背景中心」為水平基準，確保縮放時仍置中
           left: bgLeft + (BG_BASE_WIDTH * bgScale) / 2,
-          // 以「背景頂端」為垂直基準，加入基準位移（之前的 +45 也保留）
-          top: bgTop + (BG_TEXT_TOP_PX + 10) * bgScale,
+          // 以「背景頂端」為垂直基準
+          top: bgTop + BG_TEXT_TOP_PX * bgScale,
           transform: "translateX(-50%)",
           zIndex: 2,               // 文字層在投票容器(zIndex:1)之上，避免被蓋住
           pointerEvents: "none",
