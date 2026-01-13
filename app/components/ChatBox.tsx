@@ -113,6 +113,22 @@ export default function ChatBox({
                 sender: "other" as const,
               }))
             );
+
+            // 找出目前最大的路人編號，更新全域計數器
+            let maxId = 0;
+            data.forEach((m: any) => {
+              const mk = m.nickname || "";
+              if (mk.startsWith("路人")) {
+                const part = mk.replace("路人", "");
+                const num = parseInt(part, 10);
+                if (!isNaN(num) && num > maxId) {
+                  maxId = num;
+                }
+              }
+            });
+            if (maxId >= guestCounter) {
+              guestCounter = maxId + 1;
+            }
           }
 
           // subscribe to new messages
@@ -124,6 +140,17 @@ export default function ChatBox({
                 { event: "INSERT", schema: "public", table: "messages" },
                 (payload: any) => {
                   const m = payload.new;
+                  
+                  // 若新訊息是路人，更新計數器以避免撞號
+                  const mk = m.nickname || "";
+                  if (mk.startsWith("路人")) {
+                    const part = mk.replace("路人", "");
+                    const num = parseInt(part, 10);
+                    if (!isNaN(num) && num >= guestCounter) {
+                      guestCounter = num + 1;
+                    }
+                  }
+
                   setMessages((prev) => {
                     const exists = prev.some((pm) => pm.text === m.text && pm.nickname === m.nickname);
                     if (exists) return prev;
