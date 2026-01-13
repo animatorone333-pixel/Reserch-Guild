@@ -900,8 +900,8 @@ const creators = [
               top: "535px",
               left: "50%",
               transform: "translateX(-50%)",
-              // 增加寬度以將按鈕向右推 (原本是 600px，改為 760px，按鈕會向右移動 80px)
-              width: "min(760px, 92vw)",
+              // 對齊公告欄的視覺寬度 (公告欄有 scale(0.9)，所以寬度設為 600 * 0.9 = 540)
+              width: "min(540px, 83vw)",
               display: "flex",
               justifyContent: "flex-end",
               paddingRight: "0", 
