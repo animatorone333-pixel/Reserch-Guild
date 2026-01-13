@@ -903,7 +903,7 @@ const creators = [
               width: "min(600px, 92vw)",
               display: "flex",
               justifyContent: "flex-end",
-              paddingRight: "8%",
+              paddingRight: "0", 
               gap: "6px",
               zIndex: 10,
             }}
