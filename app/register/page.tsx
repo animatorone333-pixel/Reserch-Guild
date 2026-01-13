@@ -1015,7 +1015,6 @@ export default function RegisterPage() {
                     </div>
                   )}
 
-                  <div className={styles.cardBottomDivider} />
                   <button 
                     className={styles.registerButton}
                     disabled={isEditingDates || editingRegistrationId !== null} 
