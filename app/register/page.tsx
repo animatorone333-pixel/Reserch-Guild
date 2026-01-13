@@ -676,7 +676,7 @@ export default function RegisterPage() {
     if (useSupabase && supabase) {
       try {
         if (!hasEventDatesTable) {
-          alert("尚未建立 event_dates 資料表，無法編輯日期。請先在 Supabase 建立 event_dates。 ");
+          alert("尚未建立 event_dates 資料表，無法編輯日期。\n請先在 Supabase 執行 db/setup_registrations_complete.sql 建立資料表。");
           return;
         }
         // 在 Supabase 更新日期
@@ -1033,7 +1033,13 @@ export default function RegisterPage() {
           {/* 日期編輯按鈕 */}
           <button 
             className={styles.editBtn} 
-            onClick={() => setIsEditingDates(prev => !prev)}
+            onClick={() => {
+              if (!isEditingDates && !hasEventDatesTable) {
+                alert("尚未建立 event_dates 資料表，無法編輯日期。\n請在 Supabase 執行 db/setup_registrations_complete.sql 建立資料表。");
+                return;
+              }
+              setIsEditingDates(prev => !prev);
+            }}
             disabled={editingRegistrationId !== null}
           >
             {isEditingDates ? "完成編輯" : "編輯日期"}
