@@ -900,7 +900,8 @@ const creators = [
               top: "535px",
               left: "50%",
               transform: "translateX(-50%)",
-              width: "min(600px, 92vw)",
+              // 增加寬度以將按鈕向右推 (原本是 600px，改為 760px，按鈕會向右移動 80px)
+              width: "min(760px, 92vw)",
               display: "flex",
               justifyContent: "flex-end",
               paddingRight: "0", 
