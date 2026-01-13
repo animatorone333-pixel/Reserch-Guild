@@ -18,9 +18,9 @@ const STORAGE_BUCKET = "shop-images";
 
 const SHOP_SETUP_HINT =
   "常見原因：RLS/權限未設定或 Storage bucket/policy 未建立。\n" +
-  "請確認已在 Supabase SQL Editor 依序執行：\n" +
-  "- db/create_shop_items_table.sql\n" +
-  "- db/rls_shop_items.sql\n" +
+  "請確認已在 Supabase SQL Editor 執行修復腳本：\n" +
+  "- db/fix_shop_permissions.sql\n" +
+  "（此腳本會修復 Sequence 權限並補齊初始資料）\n" +
   "並建立 Storage bucket：shop-images（含 INSERT/SELECT/UPDATE/DELETE policies）。";
 
 // 舞台基準尺寸
@@ -177,6 +177,32 @@ export default function ShopPage() {
 
       if (error) throw error;
 
+      // 檢查是否為空資料表，若是則自動初始化 (Seeding)
+      if (data && data.length === 0) {
+        console.log("⚠️ Shop items 為空，嘗試自動初始化 12 個格子...");
+        const initialData = Array.from({ length: GRID_SIZE }, (_, i) => ({
+          position: i,
+          item_name: '',
+          image_url: '',
+          user_id: 'guest',
+        }));
+
+        const { error: seedError } = await supabase
+          .from('shop_items')
+          .upsert(initialData, { onConflict: 'position' });
+        
+        if (seedError) {
+          console.error("❌ 自動初始化失敗:", seedError);
+          // 不拋出錯誤，讓使用者繼續看到空介面，但 Console 會有紀錄
+        } else {
+          console.log("✅ 自動初始化成功，重新載入...");
+          // 遞迴呼叫自己重新讀取 (需小心無限迴圈，但理論上現在有資料了)
+          // 但為了安全起見，直接手動設值即可，不用再 fetch
+          setItems(createInitialItems());
+          return;
+        }
+      }
+
       if (data) {
         const loadedItems = createInitialItems();
         data.forEach(item => {
@@ -192,7 +218,10 @@ export default function ShopPage() {
           }
         });
         setItems(loadedItems);
-        console.log("✅ 從 Supabase 載入商品成功");
+        // 如果實際載入筆數 > 0，才算載入成功
+        if (data.length > 0) {
+           console.log("✅ 從 Supabase 載入商品成功");
+        }
       }
     } catch (error) {
       console.error("❌ 從 Supabase 載入失敗:", error);
@@ -328,33 +357,22 @@ export default function ShopPage() {
       const imageUrl = await uploadImageToSupabase(file, index);
       
       if (imageUrl) {
-        // 更新資料庫（用 UPDATE 取代 UPSERT：避免缺少 sequence 權限時就算只是更新也會失敗）
+        // 使用 upsert 更新資料庫（需確保 db/fix_shop_permissions.sql 已執行）
         try {
           const itemName = items[index]?.name ?? "";
-          const { data, error } = await supabase
+          const { error } = await supabase
             .from('shop_items')
-            .update({
-              image_url: imageUrl,
-              item_name: itemName,
-              user_id: 'guest',
-            })
-            .eq('position', index)
-            .select('id');
-
-          if (error) throw error;
-
-          // 若該 position 沒有 seed row，update 會回傳空陣列：自動補 INSERT
-          if (Array.isArray(data) && data.length === 0) {
-            const { error: insertError } = await supabase
-              .from('shop_items')
-              .insert({
+            .upsert(
+              {
                 position: index,
                 image_url: imageUrl,
                 item_name: itemName,
                 user_id: 'guest',
-              });
-            if (insertError) throw insertError;
-          }
+              },
+              { onConflict: 'position' }
+            );
+
+          if (error) throw error;
 
           // 更新本地狀態
           setItems((prev) => {
@@ -398,41 +416,14 @@ export default function ShopPage() {
             user_id: 'guest',
           }));
 
-          // 用 UPDATE 逐筆寫入，避免 UPSERT 可能觸發 sequence 權限問題。
-          const results = await Promise.all(
-            updates.map((u) =>
-              supabase
-                .from('shop_items')
-                .update({ item_name: u.item_name, image_url: u.image_url, user_id: u.user_id })
-                .eq('position', u.position)
-                .select('id')
-            )
-          );
+          // 用 UPSERT 批次寫入，更原子化與高效
+          // (需確保 db/fix_shop_permissions.sql 已執行，解決 Sequence 權限問題)
+          const { error } = await supabase
+            .from('shop_items')
+            .upsert(updates, { onConflict: 'position' });
 
-          const firstError = results.find((r) => r.error)?.error;
-          if (firstError) throw firstError;
+          if (error) throw error;
 
-          // 若 update 沒影響任何列（通常是沒有 seed row），自動補 INSERT。
-          const missing = results
-            .map((r, idx) => ({ idx, data: r.data }))
-            .filter((x) => Array.isArray(x.data) && x.data.length === 0)
-            .map((x) => updates[x.idx]);
-
-          if (missing.length > 0) {
-            const insertResults = await Promise.all(
-              missing.map((u) =>
-                supabase.from('shop_items').insert({
-                  position: u.position,
-                  item_name: u.item_name,
-                  image_url: u.image_url,
-                  user_id: u.user_id,
-                })
-              )
-            );
-
-            const insertError = insertResults.find((r) => r.error)?.error;
-            if (insertError) throw insertError;
-          }
           // 儲存後再讀回一次，避免「看起來沒同步」其實是本地狀態/快取問題
           await loadFromSupabase();
           alert("✅ 資料已同步到 Supabase！");
