@@ -1502,15 +1502,11 @@ const creators = [
                 minWidth: "140px",
                 padding: "4px 8px",
                 textAlign: "center",
-                color: "#fffa",  // 改為淡白色
-                // background: "#ffffff", // 移除背景
-                // borderRadius: 10,      // 移除圓角
+                color: "#000",
                 fontSize: 12,
                 fontWeight: 800,
                 zIndex: 99999,
                 userSelect: "none",
-                // boxShadow: "0 6px 18px rgba(0,0,0,0.5)", // 移除盒影
-                textShadow: "0 1px 2px rgba(0,0,0,0.8)", // 改用文字陰影
                 pointerEvents: "none",
               }}
             >
