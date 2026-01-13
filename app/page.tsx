@@ -1503,13 +1503,10 @@ const creators = [
                 padding: "4px 8px",
                 textAlign: "center",
                 color: "#000",
-                background: "#ffffff",
-                borderRadius: 10,
                 fontSize: 12,
                 fontWeight: 800,
                 zIndex: 99999,
                 userSelect: "none",
-                boxShadow: "0 6px 18px rgba(0,0,0,0.5)",
                 pointerEvents: "none",
               }}
             >
