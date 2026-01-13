@@ -913,7 +913,7 @@ export default function VotePage() {
                 position: "absolute",
                 left: "260px",
                 top: "715px", // 調整位置往下
-                width: "260px",
+                width: "140px", // 縮小寬度 (原本 260px)
                 height: "50px",
                 cursor: "pointer",
                 background: "rgba(255, 255, 255, 0.4)", // 白色半透明背景
@@ -1021,13 +1021,14 @@ export default function VotePage() {
         <div
           style={{
             position: "absolute",
-            left: "570px",
-            top: "620px",
-            width: "540px",
-            transform: "scale(0.8)",
+            left: "420px", // 移到重新投票按鈕右側 (260 + 140 + 20)
+            top: "715px",  // 對齊重新投票按鈕高度
+            width: "auto",
+            // 移除 scale，讓大小跟重新投票按鈕一致
+            transform: "none", 
             transformOrigin: "left top",
             display: "flex",
-            justifyContent: "center",
+            justifyContent: "flex-start",
             gap: "14px",
             pointerEvents: "auto",
           }}
@@ -1036,7 +1037,8 @@ export default function VotePage() {
             <button
               onClick={handleStartEditNames}
               style={{
-                padding: "10px 16px",
+                padding: "0 16px", // 調整 padding 配合高度
+                height: "50px",    // 固定高度 50px
                 borderRadius: 10,
                 border: "1px solid white",
                 background: "rgba(255, 255, 255, 0.35)",
@@ -1044,6 +1046,8 @@ export default function VotePage() {
                 fontSize: 16,
                 fontWeight: 700,
                 cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
               }}
             >
               編輯遊戲名稱
@@ -1053,7 +1057,8 @@ export default function VotePage() {
               <button
                 onClick={handleSaveNames}
                 style={{
-                  padding: "10px 16px",
+                  padding: "0 16px",
+                  height: "50px",
                   borderRadius: 10,
                   border: "1px solid white",
                   background: "rgba(144, 238, 144, 0.55)",
@@ -1061,6 +1066,8 @@ export default function VotePage() {
                   fontSize: 16,
                   fontWeight: 800,
                   cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
                 }}
               >
                 儲存
@@ -1068,7 +1075,8 @@ export default function VotePage() {
               <button
                 onClick={handleCancelEditNames}
                 style={{
-                  padding: "10px 16px",
+                  padding: "0 16px",
+                  height: "50px",
                   borderRadius: 10,
                   border: "1px solid white",
                   background: "rgba(255, 255, 255, 0.35)",
@@ -1076,6 +1084,8 @@ export default function VotePage() {
                   fontSize: 16,
                   fontWeight: 700,
                   cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
                 }}
               >
                 取消
