@@ -631,15 +631,15 @@ export default function Home() {
   // 遊戲創作者數據 (保持不變)
 const creators = [
     { 
-      name: "宋哲寧 - 射擊", 
+      name: "宋哲甯 - 射擊", 
       url: "https://julinsung.github.io/killfish/index03.html" 
     },
     { 
-      name: "宋哲寧 - 部位", 
+      name: "宋哲甯 - 部位", 
       url: "https://julinsung.github.io/bodyparts/index02.html" 
     },
     { 
-      name: "宋哲寧 - 動物", 
+      name: "宋哲甯 - 動物", 
       url: "https://julinsung.github.io/animallab/index.html" 
     },
   ];
