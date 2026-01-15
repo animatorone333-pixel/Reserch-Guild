@@ -669,57 +669,95 @@ export default function RegisterPage() {
 
   // === 事件處理函數 ===
   
-  const handleDateChange = async (index: number, newDate: string) => {
-    const oldDate = cards[index].date;
-    const normalized = normalizeServerDateKey(newDate);
+  const handleDateChange = (index: number, newDate: string) => {
+    setCards(prevCards => 
+      prevCards.map((card, i) => 
+        i === index ? { ...card, date: newDate } : card
+      )
+    );
+  };
 
-    if (useSupabase && supabase) {
-      try {
-        if (!hasEventDatesTable) {
-          alert("尚未建立 event_dates 資料表，無法編輯日期。\n請先在 Supabase 執行 db/setup_registrations_complete.sql 建立資料表。");
-          return;
-        }
-        // 在 Supabase 更新日期
-        const { error } = await supabase
-          .from('event_dates')
-          .upsert({ 
-            event_date: normalized, 
-            image_url: cards[index].image,
-            display_order: index + 1
-          }, { 
-            onConflict: 'event_date' 
-          });
-
-        if (error) throw error;
-
-        // 如果有報名資料，也要更新
-        if (oldDate !== normalized && registeredDetails[oldDate]) {
-          const detail = registeredDetails[oldDate];
-          if (detail.id) {
-            const { table: regsTable, eventCol } = await ensureRegistrationsTarget();
-            await supabase
-              .from(regsTable)
-              .update({ [eventCol]: normalized })
-              .eq('id', detail.id);
-          }
-        }
-      } catch (error) {
-        console.error("更新日期失敗:", error);
-        alert("更新日期失敗，請稍後再試");
-      }
-    } else {
-      // Fallback: 本地更新
+  const handleDateBlur = async (index: number) => {
+    const currentCardDate = cards[index].date;
+    const normalized = normalizeServerDateKey(currentCardDate);
+    
+    // UI: Update to normalized date if needed
+    if (currentCardDate !== normalized) {
       setCards(prevCards => 
         prevCards.map((card, i) => 
           i === index ? { ...card, date: normalized } : card
         )
       );
+    }
+
+    if (useSupabase && supabase) {
+      try {
+        if (!hasEventDatesTable) {
+           alert("尚未建立 event_dates 資料表，無法編輯日期。");
+           return;
+        }
+        const displayOrder = index + 1;
+        
+        // 1. 取得舊日期 (以確認是否存在並做關聯更新)
+        const { data: oldRows } = await supabase
+          .from('event_dates')
+          .select('event_date')
+          .eq('display_order', displayOrder)
+          .limit(1);
+          
+        const oldRow = oldRows?.[0];
+        const oldDate = oldRow?.event_date;
+
+        if (oldDate === normalized) return; 
+
+        // 2. 更新 event_dates
+        const { error: updateError } = await supabase
+          .from('event_dates')
+          .update({ event_date: normalized })
+          .eq('display_order', displayOrder);
+          
+        if (updateError) throw updateError;
+        
+        // 3. 更新關聯的報名資料 (Cascading Update)
+        if (oldDate && oldDate !== normalized) {
+             const { table: regsTable, eventCol } = await ensureRegistrationsTarget();
+             // 將舊日期的報名資料遷移到新日期
+             await supabase.from(regsTable)
+                .update({ [eventCol]: normalized })
+                .eq(eventCol, oldDate);
+        }
+
+        // 4. 重新載入資料以確保一致性 (特別是讓報名者列表能對應到新日期)
+        await loadFromSupabase();
+
+      } catch (error) {
+        console.error("更新日期失敗:", error);
+        alert("更新日期失敗：" + formatErrorMessage(error));
+        // 如果失敗，最好重新載入以還原正確狀態
+        await loadFromSupabase();
+      }
+    } else {
+      // Fallback: LocalStorage Persistence
+      const storedJson = localStorage.getItem(DATE_STORAGE_KEY);
+      let oldStoredDates: string[] = [];
+      try {
+          oldStoredDates = storedJson ? JSON.parse(storedJson) : [];
+      } catch {}
+
+      // Try to find old date from card index in storage, or default
+      const oldDate = oldStoredDates[index] || defaultDateCards[index].date;
+      
+      if (oldDate === normalized) return;
+
+      const newDates = cards.map((c, i) => i === index ? normalized : c.date);
+      localStorage.setItem(DATE_STORAGE_KEY, JSON.stringify(newDates));
       
       if (oldDate !== normalized && registeredDetails[oldDate]) {
         setRegisteredDetails(prev => {
           const newDetails = { ...prev };
           newDetails[normalized] = newDetails[oldDate];
           delete newDetails[oldDate];
+          localStorage.setItem(REGISTRATION_DETAILS_KEY, JSON.stringify(newDetails));
           return newDetails;
         });
       }
@@ -958,6 +996,7 @@ export default function RegisterPage() {
                     type="text"
                     value={card.date}
                     onChange={(e) => handleDateChange(i, e.target.value)}
+                    onBlur={() => handleDateBlur(i)}
                     className={styles.dateInput}
                     onClick={(e) => e.stopPropagation()} 
                   />
