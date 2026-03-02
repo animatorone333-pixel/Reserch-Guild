@@ -150,6 +150,8 @@ export default function Home() {
   });
   const [outdoorVoteCount, setOutdoorVoteCount] = useState<number | null>(null);
   const [voteRoomVoteCount, setVoteRoomVoteCount] = useState<number | null>(null);
+  const [outdoorTopDate, setOutdoorTopDate] = useState<string | null>(null);
+  const [voteRoomTopDate, setVoteRoomTopDate] = useState<string | null>(null);
   const [isRefreshingVoteSummary, setIsRefreshingVoteSummary] = useState(false);
 
   // 頭像上傳 input 的 ref
@@ -215,17 +217,38 @@ export default function Home() {
   }, []);
 
   const loadVoteSummary = async () => {
+    const getTopVoteDate = (rows: any[]): string | null => {
+      const counter = new Map<string, number>();
+      rows.forEach((row) => {
+        const d = typeof row?.vote_day === "string"
+          ? row.vote_day
+          : (typeof row?.created_at === "string" ? row.created_at.slice(0, 10) : "");
+        if (!d) return;
+        counter.set(d, (counter.get(d) ?? 0) + 1);
+      });
+
+      if (counter.size === 0) return null;
+      const sorted = Array.from(counter.entries()).sort((a, b) => {
+        if (b[1] !== a[1]) return b[1] - a[1];
+        return a[0].localeCompare(b[0]);
+      });
+      return sorted[0][0];
+    };
+
     setIsRefreshingVoteSummary(true);
     try {
       const response = await fetch("/api/outdoor-vote", { cache: "no-store" });
       const result = await response.json();
       if (response.ok && result?.success && Array.isArray(result?.data)) {
         setOutdoorVoteCount(result.data.length);
+        setOutdoorTopDate(getTopVoteDate(result.data));
       } else {
         setOutdoorVoteCount(null);
+        setOutdoorTopDate(null);
       }
     } catch {
       setOutdoorVoteCount(null);
+      setOutdoorTopDate(null);
     }
 
     try {
@@ -233,11 +256,14 @@ export default function Home() {
       const result = await response.json();
       if (response.ok && result?.success && Array.isArray(result?.data)) {
         setVoteRoomVoteCount(result.data.length);
+        setVoteRoomTopDate(getTopVoteDate(result.data));
       } else {
         setVoteRoomVoteCount(null);
+        setVoteRoomTopDate(null);
       }
     } catch {
       setVoteRoomVoteCount(null);
+      setVoteRoomTopDate(null);
     }
     setIsRefreshingVoteSummary(false);
   };
@@ -1088,7 +1114,13 @@ const creators = [
               戶外桌遊投票：{outdoorVoteCount === null ? "讀取中/未連線" : `${outdoorVoteCount} 票`}
             </div>
             <div>
+              戶外最高票日期：{outdoorTopDate ?? "-"}
+            </div>
+            <div>
               密室/劇本殺投票：{voteRoomVoteCount === null ? "讀取中/未連線" : `${voteRoomVoteCount} 票`}
+            </div>
+            <div>
+              密室最高票日期：{voteRoomTopDate ?? "-"}
             </div>
             <button
               onClick={() => void loadVoteSummary()}

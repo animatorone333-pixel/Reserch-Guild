@@ -34,12 +34,28 @@ const loadStoredGameOptions = (): string[] => {
 };
 
 export default function OutdoorVotePage() {
-  const today = new Date().toISOString().slice(0, 10);
+  const weekendOptions = useMemo(() => {
+    const options: string[] = [];
+    const base = new Date();
+    base.setHours(0, 0, 0, 0);
+
+    for (let i = 0; options.length < 24 && i < 120; i++) {
+      const d = new Date(base);
+      d.setDate(base.getDate() + i);
+      const day = d.getDay();
+      if (day === 0 || day === 6) {
+        options.push(d.toISOString().slice(0, 10));
+      }
+    }
+    return options;
+  }, []);
+
+  const initialWeekendDate = weekendOptions[0] || new Date().toISOString().slice(0, 10);
   const [gameName, setGameName] = useState("");
   const [newGameName, setNewGameName] = useState("");
   const [showAddGameModal, setShowAddGameModal] = useState(false);
   const [voterName, setVoterName] = useState("");
-  const [voteDate, setVoteDate] = useState(today);
+  const [voteDate, setVoteDate] = useState(initialWeekendDate);
   const [agreeVote, setAgreeVote] = useState(false);
   const [votes, setVotes] = useState<OutdoorVote[]>([]);
   const [gameOptions, setGameOptions] = useState<string[]>([]);
@@ -236,7 +252,7 @@ export default function OutdoorVotePage() {
       setGameName("");
       setVoterName("");
       setAgreeVote(false);
-      setVoteDate(today);
+      setVoteDate(initialWeekendDate);
       await loadVotes();
     } catch (e: any) {
       setError(e?.message || "投票失敗");
@@ -425,8 +441,7 @@ export default function OutdoorVotePage() {
 
           <label style={{ display: "grid", gap: 6 }}>
             投票日期
-            <input
-              type="date"
+            <select
               value={voteDate}
               onChange={(e) => setVoteDate(e.target.value)}
               style={{
@@ -436,7 +451,13 @@ export default function OutdoorVotePage() {
                 color: "#000",
                 background: "#fff",
               }}
-            />
+            >
+              {weekendOptions.map((date) => (
+                <option key={date} value={date}>
+                  {date}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>

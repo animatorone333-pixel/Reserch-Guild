@@ -10,6 +10,11 @@ const supabase = hasSupabase
   : null;
 
 const isValidDateString = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+const isWeekendDate = (value: string) => {
+  const date = new Date(`${value}T00:00:00`);
+  const day = date.getDay();
+  return day === 0 || day === 6;
+};
 
 export async function GET() {
   if (!supabase) {
@@ -64,6 +69,13 @@ export async function POST(request: Request) {
     if (!isValidDateString(voteDay)) {
       return NextResponse.json(
         { success: false, error: "voteDate 格式需為 YYYY-MM-DD" },
+        { status: 400 }
+      );
+    }
+
+    if (!isWeekendDate(voteDay)) {
+      return NextResponse.json(
+        { success: false, error: "投票日期只允許週六或週日" },
         { status: 400 }
       );
     }
