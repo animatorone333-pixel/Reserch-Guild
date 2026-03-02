@@ -70,6 +70,11 @@ export default function VoteRoomPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [editingVoteId, setEditingVoteId] = useState<number | null>(null);
+  const [editingGameName, setEditingGameName] = useState("");
+  const [editingVoteDate, setEditingVoteDate] = useState(initialVoteDate);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [deletingVoteId, setDeletingVoteId] = useState<number | null>(null);
 
   const loadVotes = async () => {
     setIsLoading(true);
@@ -282,6 +287,89 @@ export default function VoteRoomPage() {
       setError(e?.message || "重新投票失敗");
     } finally {
       setIsResetting(false);
+    }
+  };
+
+  const onStartEditVote = (vote: VoteRecord) => {
+    setError("");
+    setEditingVoteId(vote.id);
+    setEditingGameName(vote.game_name);
+    setEditingVoteDate(vote.vote_day || initialVoteDate);
+  };
+
+  const onCancelEditVote = () => {
+    setEditingVoteId(null);
+    setEditingGameName("");
+    setEditingVoteDate(initialVoteDate);
+    setIsSavingEdit(false);
+    setDeletingVoteId(null);
+  };
+
+  const onSaveEditVote = async () => {
+    if (!editingVoteId) return;
+
+    const trimmedGameName = editingGameName.trim();
+    const trimmedVoteDate = editingVoteDate.trim();
+
+    if (!trimmedGameName) {
+      setError("遊戲名稱不可為空");
+      return;
+    }
+
+    if (!marchSaturdayOptions.includes(trimmedVoteDate)) {
+      setError("投票日期僅能選擇 2026 年 3 月的星期六");
+      return;
+    }
+
+    setError("");
+    setIsSavingEdit(true);
+    try {
+      const response = await fetch("/api/vote-room", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingVoteId,
+          gameName: trimmedGameName,
+          voteDate: trimmedVoteDate,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || "修改投票失敗");
+      }
+
+      onCancelEditVote();
+      await loadVotes();
+    } catch (e: any) {
+      setError(e?.message || "修改投票失敗");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const onDeleteVote = async (voteId: number) => {
+    const confirmed = window.confirm("確定要刪除這筆投票紀錄嗎？");
+    if (!confirmed) return;
+
+    setError("");
+    setDeletingVoteId(voteId);
+    try {
+      const response = await fetch(`/api/vote-room?id=${voteId}`, { method: "DELETE" });
+      const result = await response.json();
+
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || "刪除投票失敗");
+      }
+
+      if (editingVoteId === voteId) {
+        onCancelEditVote();
+      }
+      await loadVotes();
+    } catch (e: any) {
+      setError(e?.message || "刪除投票失敗");
+    } finally {
+      setDeletingVoteId(null);
     }
   };
 
@@ -511,11 +599,129 @@ export default function VoteRoomPage() {
             <p style={{ margin: 0, color: "#777" }}>目前沒有紀錄</p>
           ) : (
             <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
-              {votes.map((vote) => (
-                <li key={vote.id}>
-                  {vote.game_name} ｜ {vote.voter_name} ｜ 日期：{vote.vote_day || vote.created_at.slice(0, 10)} ｜ {vote.agree_vote ? "☑ 已勾選" : "☐ 未勾選"}
-                </li>
-              ))}
+              {votes.map((vote) => {
+                const isEditing = editingVoteId === vote.id;
+
+                return (
+                  <li key={vote.id}>
+                    {!isEditing ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <span>
+                          {vote.game_name} ｜ {vote.voter_name} ｜ 日期：{vote.vote_day || vote.created_at.slice(0, 10)} ｜ {vote.agree_vote ? "☑ 已勾選" : "☐ 未勾選"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onStartEditVote(vote)}
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: 6,
+                            border: "none",
+                            background: "#1976d2",
+                            color: "#fff",
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          修改
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: 8,
+                          border: "1px solid #ddd",
+                          borderRadius: 8,
+                          padding: 10,
+                          background: "#fafafa",
+                        }}
+                      >
+                        <div style={{ fontSize: 13, color: "#555" }}>編輯：{vote.voter_name} 的投票</div>
+                        <input
+                          type="text"
+                          value={editingGameName}
+                          onChange={(e) => setEditingGameName(e.target.value)}
+                          list="escape-room-game-options"
+                          placeholder="請輸入遊戲名稱"
+                          style={{
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            border: "1px solid #ccc",
+                            color: "#000",
+                            background: "#fff",
+                          }}
+                        />
+                        <select
+                          value={editingVoteDate}
+                          onChange={(e) => setEditingVoteDate(e.target.value)}
+                          style={{
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            border: "1px solid #ccc",
+                            color: "#000",
+                            background: "#fff",
+                          }}
+                        >
+                          {marchSaturdayOptions.map((date) => (
+                            <option key={date} value={date}>
+                              {date}
+                            </option>
+                          ))}
+                        </select>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            onClick={() => void onSaveEditVote()}
+                            disabled={isSavingEdit}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: 6,
+                              border: "none",
+                              background: isSavingEdit ? "#8aa5d8" : "#1f6feb",
+                              color: "#fff",
+                              cursor: isSavingEdit ? "not-allowed" : "pointer",
+                              fontSize: 12,
+                            }}
+                          >
+                            {isSavingEdit ? "儲存中..." : "儲存修改"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void onDeleteVote(vote.id)}
+                            disabled={deletingVoteId === vote.id}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: 6,
+                              border: "none",
+                              background: deletingVoteId === vote.id ? "#d8a1a1" : "#d32f2f",
+                              color: "#fff",
+                              cursor: deletingVoteId === vote.id ? "not-allowed" : "pointer",
+                              fontSize: 12,
+                            }}
+                          >
+                            {deletingVoteId === vote.id ? "刪除中..." : "刪除這筆"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={onCancelEditVote}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: 6,
+                              border: "1px solid #ccc",
+                              background: "#fff",
+                              color: "#222",
+                              cursor: "pointer",
+                              fontSize: 12,
+                            }}
+                          >
+                            取消
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
