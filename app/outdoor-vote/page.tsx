@@ -264,6 +264,7 @@ export default function OutdoorVotePage() {
         minHeight: "100vh",
         background: "#f6f7fb",
         padding: "32px 16px",
+        color: "#000",
       }}
     >
       <div
@@ -327,6 +328,8 @@ export default function OutdoorVotePage() {
                 padding: "10px 12px",
                 border: "1px solid #ccc",
                 borderRadius: 8,
+                color: "#000",
+                background: "#fff",
               }}
             />
             <button
@@ -390,7 +393,13 @@ export default function OutdoorVotePage() {
               onChange={(e) => setGameName(e.target.value)}
               list="outdoor-game-options"
               placeholder="例如：狼人殺（戶外版）"
-              style={{ padding: "10px 12px", border: "1px solid #ccc", borderRadius: 8 }}
+              style={{
+                padding: "10px 12px",
+                border: "1px solid #ccc",
+                borderRadius: 8,
+                color: "#000",
+                background: "#fff",
+              }}
             />
             <datalist id="outdoor-game-options">
               {selectableGameNames.map((name) => (
@@ -405,7 +414,13 @@ export default function OutdoorVotePage() {
               value={voterName}
               onChange={(e) => setVoterName(e.target.value)}
               placeholder="請輸入姓名"
-              style={{ padding: "10px 12px", border: "1px solid #ccc", borderRadius: 8 }}
+              style={{
+                padding: "10px 12px",
+                border: "1px solid #ccc",
+                borderRadius: 8,
+                color: "#000",
+                background: "#fff",
+              }}
             />
           </label>
 

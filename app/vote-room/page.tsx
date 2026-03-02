@@ -250,6 +250,7 @@ export default function VoteRoomPage() {
         minHeight: "100vh",
         background: "#f7f7f9",
         padding: "32px 16px",
+        color: "#000",
       }}
     >
       <div
@@ -308,7 +309,14 @@ export default function VoteRoomPage() {
               value={newGameName}
               onChange={(e) => setNewGameName(e.target.value)}
               placeholder="新增遊戲名稱（例如：古宅驚魂）"
-              style={{ flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid #ccc" }}
+              style={{
+                flex: 1,
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1px solid #ccc",
+                color: "#000",
+                background: "#fff",
+              }}
             />
             <button
               type="button"
@@ -372,7 +380,13 @@ export default function VoteRoomPage() {
               onChange={(e) => setGameName(e.target.value)}
               list="escape-room-game-options"
               placeholder="例如：奪魂鋸密室、古宅劇本殺"
-              style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ccc" }}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1px solid #ccc",
+                color: "#000",
+                background: "#fff",
+              }}
             />
             <datalist id="escape-room-game-options">
               {selectableGameNames.map((name) => (
@@ -388,7 +402,13 @@ export default function VoteRoomPage() {
               value={voterName}
               onChange={(e) => setVoterName(e.target.value)}
               placeholder="請輸入你的姓名"
-              style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ccc" }}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1px solid #ccc",
+                color: "#000",
+                background: "#fff",
+              }}
             />
           </label>
 
