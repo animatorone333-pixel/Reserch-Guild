@@ -148,6 +148,9 @@ export default function Home() {
     avatar: "",
     loggedIn: false,
   });
+  const [outdoorVoteCount, setOutdoorVoteCount] = useState<number | null>(null);
+  const [voteRoomVoteCount, setVoteRoomVoteCount] = useState<number | null>(null);
+  const [isRefreshingVoteSummary, setIsRefreshingVoteSummary] = useState(false);
 
   // 頭像上傳 input 的 ref
   // 修正：將 fileInputRef 的初始化值設為 null，而不是它自己
@@ -209,6 +212,47 @@ export default function Home() {
     updateScale();
     window.addEventListener("resize", updateScale);
     return () => window.removeEventListener("resize", updateScale);
+  }, []);
+
+  const loadVoteSummary = async () => {
+    setIsRefreshingVoteSummary(true);
+    try {
+      const response = await fetch("/api/outdoor-vote", { cache: "no-store" });
+      const result = await response.json();
+      if (response.ok && result?.success && Array.isArray(result?.data)) {
+        setOutdoorVoteCount(result.data.length);
+      } else {
+        setOutdoorVoteCount(null);
+      }
+    } catch {
+      setOutdoorVoteCount(null);
+    }
+
+    try {
+      const response = await fetch("/api/vote-room", { cache: "no-store" });
+      const result = await response.json();
+      if (response.ok && result?.success && Array.isArray(result?.data)) {
+        setVoteRoomVoteCount(result.data.length);
+      } else {
+        setVoteRoomVoteCount(null);
+      }
+    } catch {
+      setVoteRoomVoteCount(null);
+    }
+    setIsRefreshingVoteSummary(false);
+  };
+
+  useEffect(() => {
+    void loadVoteSummary();
+    const onFocus = () => void loadVoteSummary();
+    const onStorage = () => void loadVoteSummary();
+
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   // === 從 Supabase 載入公告 ===
@@ -985,6 +1029,8 @@ const creators = [
               { href: "/about", label: "關於我們" },
               { href: "/register", label: "活動報名" },
               { href: "/vote", label: "桌遊投票" },
+              { href: "/vote-room", label: "密室/劇本殺投票" },
+              { href: "/outdoor-vote", label: "戶外桌遊投票區" },
               { href: "/shop", label: "推薦購買" },
               { href: "/gallery", label: "活動劇照" },
               { href: "/calendar", label: "遊研行事曆" },
@@ -1020,6 +1066,49 @@ const creators = [
               </React.Fragment>
             ))}
           </nav>
+
+          <div
+            style={{
+              position: "absolute",
+              bottom: "20%",
+              left: "50%",
+              transform: "translateX(-50%)",
+              minWidth: "min(520px, 85vw)",
+              padding: "8px 12px",
+              borderRadius: 8,
+              background: "rgba(0,0,0,0.55)",
+              color: "#fff",
+              fontSize: 12,
+              lineHeight: 1.6,
+              zIndex: 20,
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>投票同步摘要</div>
+            <div>
+              戶外桌遊投票：{outdoorVoteCount === null ? "讀取中/未連線" : `${outdoorVoteCount} 票`}
+            </div>
+            <div>
+              密室/劇本殺投票：{voteRoomVoteCount === null ? "讀取中/未連線" : `${voteRoomVoteCount} 票`}
+            </div>
+            <button
+              onClick={() => void loadVoteSummary()}
+              disabled={isRefreshingVoteSummary}
+              style={{
+                marginTop: 6,
+                padding: "4px 10px",
+                borderRadius: 6,
+                border: "1px solid rgba(255,255,255,0.35)",
+                background: isRefreshingVoteSummary ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.28)",
+                color: "#fff",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: isRefreshingVoteSummary ? "not-allowed" : "pointer",
+              }}
+            >
+              {isRefreshingVoteSummary ? "刷新中..." : "手動刷新"}
+            </button>
+          </div>
           
           {/* 右下角 "遊戲研究社" 圖片 - 保持不變 */}
           <div
