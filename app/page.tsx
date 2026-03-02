@@ -758,7 +758,7 @@ const creators = [
                   // --- 縮小 50%：縮小內距和字體大小 ---
                   padding: "2px 5px", 
                   borderRadius: "4px",
-                  fontSize: "10px", 
+                  fontSize: "12px", 
                   // ------------------------------------
                   fontWeight: "bold",
                   textDecoration: "none",
@@ -804,12 +804,12 @@ const creators = [
               width: "250px",
               color: "white",
               borderRadius: "10px",
-              fontSize: "10px",
+              fontSize: "12px",
               lineHeight: "2",
               zIndex: 9999,
             }}
           >
-            <h3 style={{ marginTop: 0, marginBottom: "0px", fontSize: "13px" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "0px", fontSize: "12px" }}>
               💌注意事項
             </h3>
             <ul style={{ margin: 0, paddingLeft: "0px" }}>
@@ -1044,7 +1044,7 @@ const creators = [
                     color: "white",
                     textDecoration: "none",
                     whiteSpace: "nowrap",
-                    fontSize: "clamp(12px, 1.2vw, 12px)",
+                    fontSize: "12px",
                     lineHeight: "1.5",
                     display: "flex",
                     alignItems: "center",
@@ -1165,7 +1165,7 @@ const creators = [
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: "10px",
+                  fontSize: "12px",
                   fontWeight: "bold",
                   color: "#fff",
                   textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
@@ -1248,7 +1248,7 @@ const creators = [
                       position: "absolute",
                       left: "65px",
                       top: "30%",
-                      fontSize: "14px",
+                      fontSize: "12px",
                       fontWeight: "bold",
                       lineHeight: 1,
                       whiteSpace: "nowrap",
@@ -1265,7 +1265,7 @@ const creators = [
                       position: "absolute",
                       left: "100px",
                       top: "28%",
-                      fontSize: "9px",
+                      fontSize: "12px",
                       color: "rgba(255,255,255,0.95)",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
@@ -1319,7 +1319,7 @@ const creators = [
                       style={{
                         position: "absolute",
                         left: "80px",
-                        fontSize: "8px",
+                        fontSize: "12px",
                         whiteSpace: "nowrap",
                       }}
                     >
@@ -1359,7 +1359,7 @@ const creators = [
             border: "1px solid white",
             cursor: "pointer",
             fontWeight: "bold",
-            fontSize: "0.9vw",
+            fontSize: "12px",
             zIndex: 9999,
           }}
         >
@@ -1454,7 +1454,7 @@ const creators = [
                 alignItems: "center",
                 justifyContent: "center",
                 color: "black",
-                fontSize: "15px",
+                fontSize: "12px",
                 fontWeight: "bold",
                 textAlign: "center",
               }}
@@ -1691,7 +1691,7 @@ const creators = [
               border: "1px solid white",
               cursor: "pointer",
               fontWeight: "700",
-              fontSize: "0.9vw",
+              fontSize: "12px",
               zIndex: 9999,
             }}
           >
