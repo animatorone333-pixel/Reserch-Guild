@@ -861,20 +861,6 @@ const creators = [
               overflow: "hidden",
             }}
           >
-            {/* 狀態指示器 */}
-            <div
-              style={{
-                position: "absolute",
-                top: "10px",
-                right: "10px",
-                fontSize: "12px",
-                fontWeight: "bold",
-                zIndex: 10,
-              }}
-            >
-              {useSupabase ? "🟢 Supabase" : "🟡 LocalStorage"}
-            </div>
-            
             <img
               src="/game_01.png"
               alt="公告欄"
