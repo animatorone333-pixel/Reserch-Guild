@@ -41,28 +41,28 @@ export default function VoteRoomPage() {
     return `${y}-${m}-${d}`;
   };
 
-  const weekendOptions = useMemo(() => {
+  const marchSaturdayOptions = useMemo(() => {
     const options: string[] = [];
-    const base = new Date();
-    base.setHours(0, 0, 0, 0);
+    const year = 2026;
+    const march = 2;
 
-    for (let i = 0; options.length < 24 && i < 120; i++) {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
-      const day = d.getDay();
-      if (day === 0 || day === 6) {
-        options.push(toLocalDateString(d));
+    for (let day = 1; day <= 31; day++) {
+      const date = new Date(year, march, day);
+      if (date.getMonth() !== march) break;
+      if (date.getDay() === 6) {
+        options.push(toLocalDateString(date));
       }
     }
+
     return options;
   }, []);
 
-  const initialWeekendDate = weekendOptions[0] || toLocalDateString(new Date());
+  const initialVoteDate = marchSaturdayOptions[0] || "";
   const [gameName, setGameName] = useState("");
   const [newGameName, setNewGameName] = useState("");
   const [showAddGameModal, setShowAddGameModal] = useState(false);
   const [voterName, setVoterName] = useState("");
-  const [voteDate, setVoteDate] = useState(initialWeekendDate);
+  const [voteDate, setVoteDate] = useState(initialVoteDate);
   const [agreeVote, setAgreeVote] = useState(false);
   const [votes, setVotes] = useState<VoteRecord[]>([]);
   const [gameOptions, setGameOptions] = useState<string[]>([]);
@@ -220,6 +220,11 @@ export default function VoteRoomPage() {
       return;
     }
 
+    if (!marchSaturdayOptions.includes(trimmedVoteDate)) {
+      setError("投票日期僅能選擇 3 月的星期六");
+      return;
+    }
+
     if (!agreeVote) {
       setError("請先勾選同意投票");
       return;
@@ -247,7 +252,7 @@ export default function VoteRoomPage() {
       setGameName("");
       setVoterName("");
       setAgreeVote(false);
-      setVoteDate(initialWeekendDate);
+      setVoteDate(initialVoteDate);
       await loadVotes();
     } catch (e: any) {
       setError(e?.message || "投票失敗");
@@ -447,7 +452,7 @@ export default function VoteRoomPage() {
                 background: "#fff",
               }}
             >
-              {weekendOptions.map((date) => (
+              {marchSaturdayOptions.map((date) => (
                 <option key={date} value={date}>
                   {date}
                 </option>
