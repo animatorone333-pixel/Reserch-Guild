@@ -9,6 +9,8 @@ const supabase = hasSupabase
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 
+const isValidDateString = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+
 export async function GET() {
   if (!supabase) {
     return NextResponse.json({ success: false, error: "Supabase 未設定" }, { status: 500 });
@@ -17,7 +19,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from("outdoor_votes")
-      .select("id, game_name, voter_name, agree_vote, created_at")
+      .select("id, game_name, voter_name, agree_vote, vote_day, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -42,7 +44,8 @@ export async function POST(request: Request) {
     const gameName = typeof body?.gameName === "string" ? body.gameName.trim() : "";
     const voterName = typeof body?.voterName === "string" ? body.voterName.trim() : "";
     const agreeVote = body?.agreeVote === true;
-    const voteDay = new Date().toISOString().slice(0, 10);
+    const requestedVoteDay = typeof body?.voteDate === "string" ? body.voteDate.trim() : "";
+    const voteDay = requestedVoteDay || new Date().toISOString().slice(0, 10);
 
     if (!gameName || !voterName) {
       return NextResponse.json(
@@ -58,6 +61,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!isValidDateString(voteDay)) {
+      return NextResponse.json(
+        { success: false, error: "voteDate 格式需為 YYYY-MM-DD" },
+        { status: 400 }
+      );
+    }
+
     const { data, error } = await supabase
       .from("outdoor_votes")
       .insert({
@@ -66,13 +76,13 @@ export async function POST(request: Request) {
         agree_vote: true,
         vote_day: voteDay,
       })
-      .select("id, game_name, voter_name, agree_vote, created_at")
+      .select("id, game_name, voter_name, agree_vote, vote_day, created_at")
       .single();
 
     if (error) {
       if (error.code === "23505") {
         return NextResponse.json(
-          { success: false, error: "你今天已投過這個遊戲，請改投其他遊戲。" },
+          { success: false, error: "你在該投票日期已投過這個遊戲，請改投其他遊戲或調整日期。" },
           { status: 409 }
         );
       }

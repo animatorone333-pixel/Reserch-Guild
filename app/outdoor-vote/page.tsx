@@ -8,6 +8,7 @@ type OutdoorVote = {
   game_name: string;
   voter_name: string;
   agree_vote: boolean;
+  vote_day?: string;
   created_at: string;
 };
 
@@ -33,9 +34,12 @@ const loadStoredGameOptions = (): string[] => {
 };
 
 export default function OutdoorVotePage() {
+  const today = new Date().toISOString().slice(0, 10);
   const [gameName, setGameName] = useState("");
   const [newGameName, setNewGameName] = useState("");
+  const [showAddGameModal, setShowAddGameModal] = useState(false);
   const [voterName, setVoterName] = useState("");
+  const [voteDate, setVoteDate] = useState(today);
   const [agreeVote, setAgreeVote] = useState(false);
   const [votes, setVotes] = useState<OutdoorVote[]>([]);
   const [gameOptions, setGameOptions] = useState<string[]>([]);
@@ -156,6 +160,7 @@ export default function OutdoorVotePage() {
     setGameName(trimmed);
     setNewGameName("");
     setError("");
+    setShowAddGameModal(false);
   };
 
   const handleDeleteGameOption = async (optionName: string) => {
@@ -190,9 +195,15 @@ export default function OutdoorVotePage() {
 
     const trimmedGameName = gameName.trim();
     const trimmedVoterName = voterName.trim();
+    const trimmedVoteDate = voteDate.trim();
 
     if (!trimmedGameName || !trimmedVoterName) {
       setError("請填寫遊戲名稱與姓名");
+      return;
+    }
+
+    if (!trimmedVoteDate) {
+      setError("請選擇投票日期");
       return;
     }
 
@@ -211,6 +222,7 @@ export default function OutdoorVotePage() {
         body: JSON.stringify({
           gameName: trimmedGameName,
           voterName: trimmedVoterName,
+          voteDate: trimmedVoteDate,
           agreeVote,
         }),
       });
@@ -224,6 +236,7 @@ export default function OutdoorVotePage() {
       setGameName("");
       setVoterName("");
       setAgreeVote(false);
+      setVoteDate(today);
       await loadVotes();
     } catch (e: any) {
       setError(e?.message || "投票失敗");
@@ -318,36 +331,22 @@ export default function OutdoorVotePage() {
 
         <section style={{ marginBottom: 24 }}>
           <h2 style={{ margin: "0 0 10px" }}>可選遊戲清單</h2>
-          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <input
-              value={newGameName}
-              onChange={(e) => setNewGameName(e.target.value)}
-              placeholder="新增遊戲名稱（例如：躲避球任務）"
-              style={{
-                flex: 1,
-                padding: "10px 12px",
-                border: "1px solid #ccc",
-                borderRadius: 8,
-                color: "#000",
-                background: "#fff",
-              }}
-            />
-            <button
-              type="button"
-              onClick={handleAddGameOption}
-              style={{
-                padding: "10px 12px",
-                border: "none",
-                borderRadius: 8,
-                background: "#2f7d32",
-                color: "#fff",
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
-            >
-              新增遊戲
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddGameModal(true)}
+            style={{
+              marginBottom: 10,
+              padding: "10px 12px",
+              border: "none",
+              borderRadius: 8,
+              background: "#2f7d32",
+              color: "#fff",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            新增遊戲（跳窗）
+          </button>
 
           {selectableGameNames.length === 0 ? (
             <p style={{ margin: 0, color: "#777" }}>目前還沒有可選遊戲，請先新增。</p>
@@ -424,6 +423,22 @@ export default function OutdoorVotePage() {
             />
           </label>
 
+          <label style={{ display: "grid", gap: 6 }}>
+            投票日期
+            <input
+              type="date"
+              value={voteDate}
+              onChange={(e) => setVoteDate(e.target.value)}
+              style={{
+                padding: "10px 12px",
+                border: "1px solid #ccc",
+                borderRadius: 8,
+                color: "#000",
+                background: "#fff",
+              }}
+            />
+          </label>
+
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input
               type="checkbox"
@@ -477,12 +492,88 @@ export default function OutdoorVotePage() {
             <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
               {votes.map((vote) => (
                 <li key={vote.id}>
-                  {vote.game_name} ｜ {vote.voter_name} ｜ {vote.agree_vote ? "☑ 已勾選" : "☐ 未勾選"}
+                  {vote.game_name} ｜ {vote.voter_name} ｜ 日期：{vote.vote_day || vote.created_at.slice(0, 10)} ｜ {vote.agree_vote ? "☑ 已勾選" : "☐ 未勾選"}
                 </li>
               ))}
             </ul>
           )}
         </section>
+
+        {showAddGameModal && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.45)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 9999,
+            }}
+          >
+            <div
+              style={{
+                width: "min(460px, 92vw)",
+                background: "#fff",
+                borderRadius: 12,
+                padding: 18,
+                boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+              }}
+            >
+              <h3 style={{ marginTop: 0, marginBottom: 10 }}>新增可選遊戲</h3>
+              <input
+                autoFocus
+                value={newGameName}
+                onChange={(e) => setNewGameName(e.target.value)}
+                placeholder="例如：躲避球任務"
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  padding: "10px 12px",
+                  border: "1px solid #ccc",
+                  borderRadius: 8,
+                  color: "#000",
+                  background: "#fff",
+                  marginBottom: 12,
+                }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddGameModal(false);
+                    setNewGameName("");
+                  }}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #ccc",
+                    background: "#fff",
+                    color: "#222",
+                    cursor: "pointer",
+                  }}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleAddGameOption()}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "#2f7d32",
+                    color: "#fff",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                  }}
+                >
+                  確認新增
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
