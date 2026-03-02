@@ -9,6 +9,14 @@ const supabase = hasSupabase
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 
+const formatVoteRoomError = (error: any, fallback: string) => {
+  const message = String(error?.message || "");
+  if (message.includes("vote_room_votes") || error?.code === "PGRST205") {
+    return "尚未建立 vote_room_votes 資料表，請到 Supabase SQL Editor 依序執行 db/create_vote_room_votes_table.sql 與 db/rls_vote_room_votes.sql。";
+  }
+  return message || fallback;
+};
+
 export async function GET() {
   if (!supabase) {
     return NextResponse.json({ success: false, error: "Supabase 未設定" }, { status: 500 });
@@ -26,7 +34,7 @@ export async function GET() {
     return NextResponse.json({ success: true, data: data ?? [] });
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error?.message || "讀取投票失敗" },
+      { success: false, error: formatVoteRoomError(error, "讀取投票失敗") },
       { status: 500 }
     );
   }
@@ -82,7 +90,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, data, message: "投票成功" });
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error?.message || "新增投票失敗" },
+      { success: false, error: formatVoteRoomError(error, "新增投票失敗") },
       { status: 500 }
     );
   }
@@ -104,7 +112,7 @@ export async function DELETE() {
     return NextResponse.json({ success: true, message: "已清空投票紀錄" });
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error?.message || "清空投票失敗" },
+      { success: false, error: formatVoteRoomError(error, "清空投票失敗") },
       { status: 500 }
     );
   }

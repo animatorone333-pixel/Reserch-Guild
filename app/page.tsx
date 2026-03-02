@@ -1070,10 +1070,9 @@ const creators = [
           <div
             style={{
               position: "absolute",
-              bottom: "20%",
-              left: "50%",
-              transform: "translateX(-50%)",
-              minWidth: "min(520px, 85vw)",
+              bottom: "356px",
+              left: "50px",
+              width: "280px",
               padding: "8px 12px",
               borderRadius: 8,
               background: "rgba(0,0,0,0.55)",
