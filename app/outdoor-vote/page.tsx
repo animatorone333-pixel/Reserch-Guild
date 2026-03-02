@@ -34,6 +34,13 @@ const loadStoredGameOptions = (): string[] => {
 };
 
 export default function OutdoorVotePage() {
+  const toLocalDateString = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
   const weekendOptions = useMemo(() => {
     const options: string[] = [];
     const base = new Date();
@@ -44,13 +51,13 @@ export default function OutdoorVotePage() {
       d.setDate(base.getDate() + i);
       const day = d.getDay();
       if (day === 0 || day === 6) {
-        options.push(d.toISOString().slice(0, 10));
+        options.push(toLocalDateString(d));
       }
     }
     return options;
   }, []);
 
-  const initialWeekendDate = weekendOptions[0] || new Date().toISOString().slice(0, 10);
+  const initialWeekendDate = weekendOptions[0] || toLocalDateString(new Date());
   const [gameName, setGameName] = useState("");
   const [newGameName, setNewGameName] = useState("");
   const [showAddGameModal, setShowAddGameModal] = useState(false);

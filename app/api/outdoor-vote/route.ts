@@ -11,8 +11,10 @@ const supabase = hasSupabase
 
 const isValidDateString = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 const isWeekendDate = (value: string) => {
-  const date = new Date(`${value}T00:00:00`);
-  const day = date.getDay();
+  const [year, month, dayOfMonth] = value.split("-").map(Number);
+  if (!year || !month || !dayOfMonth) return false;
+  const date = new Date(Date.UTC(year, month - 1, dayOfMonth));
+  const day = date.getUTCDay();
   return day === 0 || day === 6;
 };
 
