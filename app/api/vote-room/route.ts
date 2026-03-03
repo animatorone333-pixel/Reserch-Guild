@@ -53,23 +53,18 @@ const normalizeExistingVoteDates = (row: ExistingVoteRecord): string[] => {
   return [];
 };
 
-const parseGamePrice = (value: unknown): number | null => {
+const parseGamePriceText = (value: unknown): string | null => {
   if (value === null || value === undefined) return null;
-  if (typeof value === "number") {
-    if (!Number.isFinite(value) || value < 0) return NaN;
-    return Number(value.toFixed(2));
-  }
-
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return null;
-    const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed) || parsed < 0) return NaN;
-    return Number(parsed.toFixed(2));
+    return trimmed;
   }
 
-  return NaN;
+  return "__INVALID__";
 };
+
+const isValidPriceText = (value: string) => /^\d+人\/\d+元$/.test(value);
 
 const formatVoteRoomError = (error: any, fallback: string) => {
   const message = String(error?.message || "");
@@ -111,7 +106,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const gameName = typeof body?.gameName === "string" ? body.gameName.trim() : "";
     const gameUrl = typeof body?.gameUrl === "string" ? body.gameUrl.trim() : "";
-    const gamePrice = parseGamePrice(body?.gamePrice);
+    const gamePrice = parseGamePriceText(body?.gamePrice);
     const voterName = typeof body?.voterName === "string" ? body.voterName.trim() : "";
     const agreeVote = body?.agreeVote === true;
     const voteDates = parseVoteDatesPayload(body?.voteDates);
@@ -130,9 +125,16 @@ export async function POST(request: Request) {
       );
     }
 
-    if (Number.isNaN(gamePrice)) {
+    if (gamePrice === "__INVALID__") {
       return NextResponse.json(
-        { success: false, error: "gamePrice 必須是大於等於 0 的數字" },
+        { success: false, error: "gamePrice 格式不正確" },
+        { status: 400 }
+      );
+    }
+
+    if (typeof gamePrice === "string" && !isValidPriceText(gamePrice)) {
+      return NextResponse.json(
+        { success: false, error: "gamePrice 格式需為 X人/XXXX元" },
         { status: 400 }
       );
     }
@@ -280,7 +282,7 @@ export async function PATCH(request: Request) {
     const voteId = Number(body?.id);
     const gameName = typeof body?.gameName === "string" ? body.gameName.trim() : "";
     const gameUrl = typeof body?.gameUrl === "string" ? body.gameUrl.trim() : "";
-    const gamePrice = parseGamePrice(body?.gamePrice);
+    const gamePrice = parseGamePriceText(body?.gamePrice);
     const voteDates = parseVoteDatesPayload(body?.voteDates);
 
     if (!Number.isInteger(voteId) || voteId <= 0) {
@@ -297,9 +299,16 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (Number.isNaN(gamePrice)) {
+    if (gamePrice === "__INVALID__") {
       return NextResponse.json(
-        { success: false, error: "gamePrice 必須是大於等於 0 的數字" },
+        { success: false, error: "gamePrice 格式不正確" },
+        { status: 400 }
+      );
+    }
+
+    if (typeof gamePrice === "string" && !isValidPriceText(gamePrice)) {
+      return NextResponse.json(
+        { success: false, error: "gamePrice 格式需為 X人/XXXX元" },
         { status: 400 }
       );
     }

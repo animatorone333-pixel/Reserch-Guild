@@ -7,7 +7,22 @@ ALTER TABLE public.vote_room_votes
   ADD COLUMN IF NOT EXISTS game_url TEXT;
 
 ALTER TABLE public.vote_room_votes
-  ADD COLUMN IF NOT EXISTS game_price NUMERIC(10,2);
+  ADD COLUMN IF NOT EXISTS game_price TEXT;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'vote_room_votes'
+      AND column_name = 'game_price'
+      AND data_type <> 'text'
+  ) THEN
+    ALTER TABLE public.vote_room_votes
+      ALTER COLUMN game_price TYPE TEXT USING game_price::TEXT;
+  END IF;
+END $$;
 
 ALTER TABLE public.vote_room_votes
   ADD COLUMN IF NOT EXISTS vote_days JSONB NOT NULL DEFAULT '[]'::jsonb;
@@ -21,6 +36,3 @@ WHERE jsonb_typeof(vote_days) = 'array'
 
 ALTER TABLE public.vote_room_votes
   DROP CONSTRAINT IF EXISTS vote_room_votes_game_price_non_negative;
-ALTER TABLE public.vote_room_votes
-  ADD CONSTRAINT vote_room_votes_game_price_non_negative
-  CHECK (game_price IS NULL OR game_price >= 0);

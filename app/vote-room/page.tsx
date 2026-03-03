@@ -7,7 +7,7 @@ interface VoteRecord {
   id: number;
   game_name: string;
   game_url?: string | null;
-  game_price?: number | null;
+  game_price?: string | null;
   voter_name: string;
   agree_vote: boolean;
   vote_day?: string;
@@ -35,6 +35,8 @@ const createEmptyGameRow = (): GameInputRow => ({
   gameUrl: "",
   gamePrice: "",
 });
+
+const isValidPriceText = (value: string) => /^\d+人\/\d+元$/.test(value);
 
 const parseVoteDates = (vote: VoteRecord): string[] => {
   if (Array.isArray(vote.vote_days) && vote.vote_days.length > 0) {
@@ -116,8 +118,42 @@ export default function VoteRoomPage() {
     }
   };
 
+  const loadVoteGames = async () => {
+    try {
+      const response = await fetch("/api/vote-room-games", { cache: "no-store" });
+      const result = await response.json();
+
+      if (!response.ok || !result?.success || !Array.isArray(result?.data)) {
+        throw new Error(result?.error || "讀取本次遊戲清單失敗");
+      }
+
+      const games: VoteGameOption[] = result.data.map((item: any) => ({
+        id: String(item.id),
+        gameName: typeof item?.game_name === "string" ? item.game_name : "",
+        gameUrl: typeof item?.game_url === "string" ? item.game_url : "",
+        gamePrice: typeof item?.game_price === "string" ? item.game_price : "",
+      }));
+
+      setCurrentVoteGames(games);
+      setSelectedGameIds([]);
+      setGameRows(
+        games.length > 0
+          ? games.map((game) => ({
+              id: game.id,
+              gameName: game.gameName,
+              gameUrl: game.gameUrl,
+              gamePrice: game.gamePrice,
+            }))
+          : [createEmptyGameRow()]
+      );
+    } catch (e: any) {
+      setError(e?.message || "讀取本次遊戲清單失敗");
+    }
+  };
+
   useEffect(() => {
     void loadVotes();
+    void loadVoteGames();
   }, []);
 
   const voteStats = useMemo(() => {
@@ -162,7 +198,7 @@ export default function VoteRoomPage() {
     );
   };
 
-  const onSaveCurrentVoteGames = () => {
+  const onSaveCurrentVoteGames = async () => {
     const normalizedRows = gameRows
       .map((row) => ({
         id: row.id,
@@ -200,33 +236,83 @@ export default function VoteRoomPage() {
       return;
     }
 
-    const invalidPriceRow = normalizedRows.find(
-      (row) => row.gamePrice && Number.isNaN(Number(row.gamePrice))
-    );
+    const invalidPriceRow = normalizedRows.find((row) => row.gamePrice && !isValidPriceText(row.gamePrice));
     if (invalidPriceRow) {
       const rowIndex = normalizedRows.findIndex((row) => row.id === invalidPriceRow.id) + 1;
       setSuccessMessage("");
-      setError(`第 ${rowIndex} 列價格需為數字`);
+      setError(`第 ${rowIndex} 列價格格式需為 X人/XXXX元`);
       return;
     }
 
-    const voteGames = normalizedRows.map((row) => ({
-      id: row.id,
-      gameName: row.gameName,
-      gameUrl: row.gameUrl,
-      gamePrice: row.gamePrice,
-    }));
+    try {
+      const response = await fetch("/api/vote-room-games", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          games: normalizedRows.map((row) => ({
+            gameName: row.gameName,
+            gameUrl: row.gameUrl,
+            gamePrice: row.gamePrice,
+          })),
+        }),
+      });
 
-    setCurrentVoteGames(voteGames);
-    setSelectedGameIds((prev) => prev.filter((id) => voteGames.some((item) => item.id === id)));
-    setError("");
-    setSuccessMessage(`已儲存本次遊戲清單（共 ${voteGames.length} 款）`);
+      const result = await response.json();
+      if (!response.ok || !result?.success || !Array.isArray(result?.data)) {
+        throw new Error(result?.error || "儲存本次遊戲清單失敗");
+      }
+
+      const voteGames: VoteGameOption[] = result.data.map((item: any) => ({
+        id: String(item.id),
+        gameName: typeof item?.game_name === "string" ? item.game_name : "",
+        gameUrl: typeof item?.game_url === "string" ? item.game_url : "",
+        gamePrice: typeof item?.game_price === "string" ? item.game_price : "",
+      }));
+
+      setCurrentVoteGames(voteGames);
+      setSelectedGameIds((prev) => prev.filter((id) => voteGames.some((item) => item.id === id)));
+      setGameRows(
+        voteGames.map((game) => ({
+          id: game.id,
+          gameName: game.gameName,
+          gameUrl: game.gameUrl,
+          gamePrice: game.gamePrice,
+        }))
+      );
+      setError("");
+      setSuccessMessage(`已儲存本次遊戲清單（共 ${voteGames.length} 款）`);
+    } catch (e: any) {
+      setSuccessMessage("");
+      setError(e?.message || "儲存本次遊戲清單失敗");
+    }
   };
 
   const onToggleVoteGame = (gameId: string) => {
     setSelectedGameIds((prev) =>
       prev.includes(gameId) ? prev.filter((id) => id !== gameId) : [...prev, gameId]
     );
+  };
+
+  const onDeleteVoteGame = async (gameId: string) => {
+    try {
+      const response = await fetch(`/api/vote-room-games?id=${gameId}`, { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || "刪除遊戲失敗");
+      }
+
+      setCurrentVoteGames((prev) => prev.filter((item) => item.id !== gameId));
+      setSelectedGameIds((prev) => prev.filter((id) => id !== gameId));
+      setGameRows((prev) => {
+        const next = prev.filter((row) => row.id !== gameId);
+        return next.length > 0 ? next : [createEmptyGameRow()];
+      });
+      setError("");
+      setSuccessMessage("已刪除遊戲");
+    } catch (e: any) {
+      setSuccessMessage("");
+      setError(e?.message || "刪除遊戲失敗");
+    }
   };
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -298,8 +384,6 @@ export default function VoteRoomPage() {
         }
       }
 
-      setGameRows([createEmptyGameRow()]);
-      setCurrentVoteGames([]);
       setSelectedGameIds([]);
       setVoterName("");
       setAgreeVote(false);
@@ -327,9 +411,6 @@ export default function VoteRoomPage() {
       }
 
       setVotes([]);
-      setGameRows([createEmptyGameRow()]);
-      setCurrentVoteGames([]);
-      setSelectedGameIds([]);
       setVoterName("");
       setAgreeVote(false);
       setVoteDates(initialVoteDate ? [initialVoteDate] : []);
@@ -347,8 +428,8 @@ export default function VoteRoomPage() {
     setEditingGameName(vote.game_name);
     setEditingGameUrl(typeof vote.game_url === "string" ? vote.game_url : "");
     setEditingGamePrice(
-      typeof vote.game_price === "number" && Number.isFinite(vote.game_price)
-        ? String(vote.game_price)
+      typeof vote.game_price === "string"
+        ? vote.game_price
         : ""
     );
     const normalizedVoteDates = parseVoteDates(vote);
@@ -399,8 +480,8 @@ export default function VoteRoomPage() {
       }
     }
 
-    if (trimmedGamePrice && Number.isNaN(Number(trimmedGamePrice))) {
-      setError("價格需為數字");
+    if (trimmedGamePrice && !isValidPriceText(trimmedGamePrice)) {
+      setError("價格格式需為 X人/XXXX元");
       return;
     }
 
@@ -628,7 +709,7 @@ export default function VoteRoomPage() {
                           type="text"
                           value={row.gamePrice}
                           onChange={(e) => onChangeGameRow(row.id, "gamePrice", e.target.value)}
-                          placeholder="例如：800"
+                          placeholder="例如：4人/1580元"
                           style={{
                             width: "100%",
                             padding: "10px 12px",
@@ -677,12 +758,23 @@ export default function VoteRoomPage() {
                         checked={selectedGameIds.includes(option.id)}
                         onChange={() => onToggleVoteGame(option.id)}
                       />
-                      <span>
-                        {option.gameName}
-                        {option.gamePrice ? ` ｜ 價格：${option.gamePrice}` : ""}
-                        {option.gameUrl ? " ｜ 有網址" : ""}
-                      </span>
+                      <span>{option.gameName}</span>
                     </label>
+                    <button
+                      type="button"
+                      onClick={() => void onDeleteVoteGame(option.id)}
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 6,
+                        border: "none",
+                        background: "#d32f2f",
+                        color: "#fff",
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      刪除
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -777,7 +869,7 @@ export default function VoteRoomPage() {
                               </a>
                             </>
                           ) : null}
-                          {typeof vote.game_price === "number" ? ` ｜ 價格：${vote.game_price}` : ""} ｜ {vote.voter_name} ｜ 日期：
+                          {typeof vote.game_price === "string" && vote.game_price ? ` ｜ 價格：${vote.game_price}` : ""} ｜ {vote.voter_name} ｜ 日期：
                           {parseVoteDates(vote).join(", ") || vote.created_at.slice(0, 10)} ｜ {vote.agree_vote ? "☑ 已勾選" : "☐ 未勾選"}
                         </span>
                         <button
@@ -862,7 +954,7 @@ export default function VoteRoomPage() {
                                     type="text"
                                     value={editingGamePrice}
                                     onChange={(e) => setEditingGamePrice(e.target.value)}
-                                    placeholder="例如：800"
+                                    placeholder="例如：4人/1580元"
                                     style={{
                                       width: "100%",
                                       padding: "8px 10px",
