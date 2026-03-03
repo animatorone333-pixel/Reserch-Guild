@@ -102,6 +102,7 @@ export default function VoteRoomPage() {
   const [editingSelectedGames, setEditingSelectedGames] = useState<string[]>([]);
   const [editingVoteDates, setEditingVoteDates] = useState<string[]>(initialVoteDate ? [initialVoteDate] : []);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [deletingVoterName, setDeletingVoterName] = useState<string | null>(null);
 
   const loadVotes = async () => {
     setIsLoading(true);
@@ -229,7 +230,9 @@ export default function VoteRoomPage() {
   const selectableGameNames = useMemo(() => {
     const fromCurrent = currentVoteGames.map((game) => game.gameName.trim());
     const fromVotes = votes.map((vote) => vote.game_name.trim());
-    return Array.from(new Set([...fromCurrent, ...fromVotes].filter((name) => name.length > 0)));
+    const names = Array.from(new Set([...fromCurrent, ...fromVotes].filter((name) => name.length > 0)));
+    const withoutAll = names.filter((name) => name !== "以上皆可");
+    return ["以上皆可", ...withoutAll];
   }, [currentVoteGames, votes]);
 
 
@@ -513,7 +516,7 @@ export default function VoteRoomPage() {
     setError("");
     setSuccessMessage("");
     setEditingVoterName(summary.voterName);
-    setEditingSelectedGames(summary.games.filter((name) => name !== "以上皆可"));
+    setEditingSelectedGames(summary.games);
     setEditingVoteDates(summary.dates.length > 0 ? summary.dates : initialVoteDate ? [initialVoteDate] : []);
   };
 
@@ -522,11 +525,19 @@ export default function VoteRoomPage() {
     setEditingSelectedGames([]);
     setEditingVoteDates(initialVoteDate ? [initialVoteDate] : []);
     setIsSavingEdit(false);
+    setDeletingVoterName(null);
   };
 
   const onToggleEditingGame = (gameName: string) => {
+    if (gameName === "以上皆可") {
+      setEditingSelectedGames((prev) => (prev.includes("以上皆可") ? [] : ["以上皆可"]));
+      return;
+    }
+
     setEditingSelectedGames((prev) =>
-      prev.includes(gameName) ? prev.filter((item) => item !== gameName) : [...prev, gameName]
+      prev.includes(gameName)
+        ? prev.filter((item) => item !== gameName)
+        : [...prev.filter((item) => item !== "以上皆可"), gameName]
     );
   };
 
@@ -538,7 +549,11 @@ export default function VoteRoomPage() {
       .map((date) => date.trim())
       .filter((date) => date.length > 0);
 
-    if (!editingSelectedGames.length) {
+    const selectedGamesToSave = editingSelectedGames.includes("以上皆可")
+      ? ["以上皆可"]
+      : editingSelectedGames;
+
+    if (!selectedGamesToSave.length) {
       setError("請至少選擇一個遊戲");
       return;
     }
@@ -567,7 +582,7 @@ export default function VoteRoomPage() {
         }
       }
 
-      for (const gameName of editingSelectedGames) {
+      for (const gameName of selectedGamesToSave) {
         const fromCurrent = currentVoteGames.find((game) => game.gameName === gameName);
         const fromVotes = targetVotes.find((vote) => vote.game_name === gameName);
         const gameUrl = fromCurrent?.gameUrl || (typeof fromVotes?.game_url === "string" ? fromVotes.game_url : "");
@@ -598,6 +613,34 @@ export default function VoteRoomPage() {
       setError(e?.message || "修改投票失敗");
     } finally {
       setIsSavingEdit(false);
+    }
+  };
+
+  const onDeleteVoterVotes = async (summary: VoterSummary) => {
+    const confirmed = window.confirm(`確定要刪除 ${summary.voterName} 的所有投票紀錄嗎？`);
+    if (!confirmed) return;
+
+    setError("");
+    setSuccessMessage("");
+    setDeletingVoterName(summary.voterName);
+    try {
+      for (const voteId of summary.voteIds) {
+        const response = await fetch(`/api/vote-room?id=${voteId}`, { method: "DELETE" });
+        const result = await response.json();
+        if (!response.ok || !result?.success) {
+          throw new Error(result?.error || "刪除投票失敗");
+        }
+      }
+
+      if (editingVoterName === summary.voterName) {
+        onCancelEditVoter();
+      }
+      await loadVotes();
+      setSuccessMessage(`已刪除 ${summary.voterName} 的全部投票`);
+    } catch (e: any) {
+      setError(e?.message || "刪除投票失敗");
+    } finally {
+      setDeletingVoterName(null);
     }
   };
 
@@ -945,6 +988,22 @@ export default function VoteRoomPage() {
                           >
                             修改
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => void onDeleteVoterVotes(summary)}
+                            disabled={deletingVoterName === summary.voterName}
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: 6,
+                              border: "none",
+                              background: deletingVoterName === summary.voterName ? "#d8a1a1" : "#d32f2f",
+                              color: "#fff",
+                              cursor: deletingVoterName === summary.voterName ? "not-allowed" : "pointer",
+                              fontSize: 12,
+                            }}
+                          >
+                            {deletingVoterName === summary.voterName ? "刪除中..." : "整筆刪除"}
+                          </button>
                         </div>
                         <div>遊戲：{summary.games.join("、") || "-"}</div>
                         <div>日期：{summary.dates.join("、") || "-"}</div>
@@ -1025,6 +1084,22 @@ export default function VoteRoomPage() {
                             }}
                           >
                             取消
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void onDeleteVoterVotes(summary)}
+                            disabled={deletingVoterName === summary.voterName}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: 6,
+                              border: "none",
+                              background: deletingVoterName === summary.voterName ? "#d8a1a1" : "#d32f2f",
+                              color: "#fff",
+                              cursor: deletingVoterName === summary.voterName ? "not-allowed" : "pointer",
+                              fontSize: 12,
+                            }}
+                          >
+                            {deletingVoterName === summary.voterName ? "刪除中..." : "整筆刪除"}
                           </button>
                         </div>
                       </div>
