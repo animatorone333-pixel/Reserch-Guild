@@ -17,61 +17,24 @@ interface VoteRecord {
 
 interface GameInputRow {
   id: string;
-  selected: boolean;
   gameName: string;
   gameUrl: string;
   gamePrice: string;
 }
 
-interface SavedGameOption {
+interface VoteGameOption {
   id: string;
   gameName: string;
   gameUrl: string;
   gamePrice: string;
 }
 
-const SAVED_GAME_OPTIONS_STORAGE_KEY = "vote_room_saved_game_options_v1";
-
 const createEmptyGameRow = (): GameInputRow => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-  selected: true,
   gameName: "",
   gameUrl: "",
   gamePrice: "",
 });
-
-const loadSavedGameOptions = (): SavedGameOption[] => {
-  if (typeof window === "undefined") return [];
-
-  const raw = localStorage.getItem(SAVED_GAME_OPTIONS_STORAGE_KEY);
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .filter((item): item is SavedGameOption => {
-        return (
-          typeof item === "object" &&
-          item !== null &&
-          typeof item.id === "string" &&
-          typeof item.gameName === "string" &&
-          typeof item.gameUrl === "string" &&
-          typeof item.gamePrice === "string"
-        );
-      })
-      .map((item) => ({
-        ...item,
-        gameName: item.gameName.trim(),
-        gameUrl: item.gameUrl.trim(),
-        gamePrice: item.gamePrice.trim(),
-      }))
-      .filter((item) => item.gameName.length > 0);
-  } catch {
-    return [];
-  }
-};
 
 const parseVoteDates = (vote: VoteRecord): string[] => {
   if (Array.isArray(vote.vote_days) && vote.vote_days.length > 0) {
@@ -114,11 +77,12 @@ export default function VoteRoomPage() {
 
   const initialVoteDate = marchSaturdayOptions[0] || "";
   const [gameRows, setGameRows] = useState<GameInputRow[]>([createEmptyGameRow()]);
+  const [currentVoteGames, setCurrentVoteGames] = useState<VoteGameOption[]>([]);
+  const [selectedGameIds, setSelectedGameIds] = useState<string[]>([]);
   const [voterName, setVoterName] = useState("");
   const [voteDates, setVoteDates] = useState<string[]>(initialVoteDate ? [initialVoteDate] : []);
   const [agreeVote, setAgreeVote] = useState(false);
   const [votes, setVotes] = useState<VoteRecord[]>([]);
-  const [savedGameOptions, setSavedGameOptions] = useState<SavedGameOption[]>([]);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -154,13 +118,7 @@ export default function VoteRoomPage() {
 
   useEffect(() => {
     void loadVotes();
-    setSavedGameOptions(loadSavedGameOptions());
   }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(SAVED_GAME_OPTIONS_STORAGE_KEY, JSON.stringify(savedGameOptions));
-  }, [savedGameOptions]);
 
   const voteStats = useMemo(() => {
     const stats = new Map<string, number>();
@@ -204,99 +162,71 @@ export default function VoteRoomPage() {
     );
   };
 
-  const onToggleGameRowSelected = (rowId: string) => {
-    setGameRows((prev) =>
-      prev.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              selected: !row.selected,
-            }
-          : row
-      )
-    );
-  };
+  const onSaveCurrentVoteGames = () => {
+    const normalizedRows = gameRows
+      .map((row) => ({
+        id: row.id,
+        gameName: row.gameName.trim(),
+        gameUrl: row.gameUrl.trim(),
+        gamePrice: row.gamePrice.trim(),
+      }))
+      .filter((row) => row.gameName || row.gameUrl || row.gamePrice);
 
-  const onSaveGameRow = (rowId: string) => {
-    const row = gameRows.find((item) => item.id === rowId);
-    if (!row) return;
-
-    const gameName = row.gameName.trim();
-    const gameUrl = row.gameUrl.trim();
-    const gamePrice = row.gamePrice.trim();
-
-    if (!gameName) {
+    if (!normalizedRows.length) {
       setSuccessMessage("");
-      setError("請先填寫遊戲名稱再儲存");
+      setError("請至少填寫一款遊戲後再儲存");
       return;
     }
 
-    if (gameUrl) {
+    if (normalizedRows.some((row) => !row.gameName)) {
+      setSuccessMessage("");
+      setError("每一列都需要填寫遊戲名稱");
+      return;
+    }
+
+    const invalidUrlRow = normalizedRows.find((row) => {
+      if (!row.gameUrl) return false;
       try {
-        new URL(gameUrl);
+        new URL(row.gameUrl);
+        return false;
       } catch {
-        setSuccessMessage("");
-        setError("遊戲網址格式不正確，無法儲存");
-        return;
+        return true;
       }
-    }
-
-    if (gamePrice && Number.isNaN(Number(gamePrice))) {
+    });
+    if (invalidUrlRow) {
+      const rowIndex = normalizedRows.findIndex((row) => row.id === invalidUrlRow.id) + 1;
       setSuccessMessage("");
-      setError("價格需為數字，無法儲存");
+      setError(`第 ${rowIndex} 列遊戲網址格式不正確`);
       return;
     }
 
-    setSavedGameOptions((prev) => {
-      const duplicatedIndex = prev.findIndex(
-        (item) => item.gameName.trim().toLowerCase() === gameName.toLowerCase()
-      );
+    const invalidPriceRow = normalizedRows.find(
+      (row) => row.gamePrice && Number.isNaN(Number(row.gamePrice))
+    );
+    if (invalidPriceRow) {
+      const rowIndex = normalizedRows.findIndex((row) => row.id === invalidPriceRow.id) + 1;
+      setSuccessMessage("");
+      setError(`第 ${rowIndex} 列價格需為數字`);
+      return;
+    }
 
-      if (duplicatedIndex >= 0) {
-        const next = [...prev];
-        next[duplicatedIndex] = {
-          ...next[duplicatedIndex],
-          gameName,
-          gameUrl,
-          gamePrice,
-        };
-        return next;
-      }
+    const voteGames = normalizedRows.map((row) => ({
+      id: row.id,
+      gameName: row.gameName,
+      gameUrl: row.gameUrl,
+      gamePrice: row.gamePrice,
+    }));
 
-      return [
-        ...prev,
-        {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          gameName,
-          gameUrl,
-          gamePrice,
-        },
-      ];
-    });
-
+    setCurrentVoteGames(voteGames);
+    setSelectedGameIds((prev) => prev.filter((id) => voteGames.some((item) => item.id === id)));
     setError("");
-    setSuccessMessage(`已儲存：${gameName}`);
+    setSuccessMessage(`已儲存本次遊戲清單（共 ${voteGames.length} 款）`);
   };
 
-  const onApplySavedGame = (option: SavedGameOption) => {
-    setGameRows((prev) => [
-      ...prev,
-      {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        selected: true,
-        gameName: option.gameName,
-        gameUrl: option.gameUrl,
-        gamePrice: option.gamePrice,
-      },
-    ]);
-    setError("");
-    setSuccessMessage(`已加入：${option.gameName}`);
-  };
-
-  const onDeleteSavedGame = (optionId: string) => {
-    setSavedGameOptions((prev) => prev.filter((item) => item.id !== optionId));
-    setError("");
-    setSuccessMessage("已刪除儲存的遊戲");
+  const onToggleVoteGame = (gameId: string) => {
+    setSelectedGameIds((prev) =>
+      prev.includes(gameId) ? prev.filter((id) => id !== gameId) : [...prev, gameId]
+    );
   };
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -308,43 +238,18 @@ export default function VoteRoomPage() {
       .map((date) => date.trim())
       .filter((date) => date.length > 0);
 
-    const normalizedRows = gameRows.map((row) => ({
-      ...row,
-      gameName: row.gameName.trim(),
-      gameUrl: row.gameUrl.trim(),
-      gamePrice: row.gamePrice.trim(),
-    }));
-
-    const selectedRows = normalizedRows.filter((row) => row.selected);
-    const filledRows = selectedRows.filter(
-      (row) => row.gameName || row.gameUrl || row.gamePrice
-    );
-
-    const submitRows = filledRows.filter((row) => row.gameName);
-
     if (!trimmedVoterName) {
       setError("請填寫姓名");
       return;
     }
 
-    if (!selectedRows.length) {
-      setError("請至少勾選一個遊戲列");
+    if (!currentVoteGames.length) {
+      setError("請先在遊戲資訊表格填寫並儲存本次遊戲清單");
       return;
     }
 
-    if (!filledRows.length) {
-      setError("請至少新增一列遊戲資訊");
-      return;
-    }
-
-    if (!submitRows.length) {
-      setError("請至少填寫一個遊戲名稱");
-      return;
-    }
-
-    const hasPartialRow = filledRows.some((row) => !row.gameName);
-    if (hasPartialRow) {
-      setError("有列資料未填遊戲名稱，請補上或刪除該列");
+    if (!selectedGameIds.length) {
+      setError("請在遊戲投票區勾選當次要投票的遊戲");
       return;
     }
 
@@ -359,27 +264,9 @@ export default function VoteRoomPage() {
       return;
     }
 
-    const invalidUrlRow = submitRows.find((row) => {
-      if (!row.gameUrl) return false;
-      try {
-        new URL(row.gameUrl);
-        return false;
-      } catch {
-        return true;
-      }
-    });
-    if (invalidUrlRow) {
-      const rowIndex = submitRows.findIndex((row) => row.id === invalidUrlRow.id) + 1;
-      setError(`第 ${rowIndex} 列遊戲網址格式不正確`);
-      return;
-    }
-
-    const invalidPriceRow = submitRows.find(
-      (row) => row.gamePrice && Number.isNaN(Number(row.gamePrice))
-    );
-    if (invalidPriceRow) {
-      const rowIndex = submitRows.findIndex((row) => row.id === invalidPriceRow.id) + 1;
-      setError(`第 ${rowIndex} 列價格需為數字`);
+    const submitRows = currentVoteGames.filter((game) => selectedGameIds.includes(game.id));
+    if (!submitRows.length) {
+      setError("勾選的遊戲已失效，請重新勾選");
       return;
     }
 
@@ -412,6 +299,8 @@ export default function VoteRoomPage() {
       }
 
       setGameRows([createEmptyGameRow()]);
+      setCurrentVoteGames([]);
+      setSelectedGameIds([]);
       setVoterName("");
       setAgreeVote(false);
       setVoteDates(initialVoteDate ? [initialVoteDate] : []);
@@ -439,6 +328,8 @@ export default function VoteRoomPage() {
 
       setVotes([]);
       setGameRows([createEmptyGameRow()]);
+      setCurrentVoteGames([]);
+      setSelectedGameIds([]);
       setVoterName("");
       setAgreeVote(false);
       setVoteDates(initialVoteDate ? [initialVoteDate] : []);
@@ -646,29 +537,43 @@ export default function VoteRoomPage() {
           <div style={{ display: "grid", gap: 6 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
               <span>遊戲資訊（表格）</span>
-              <button
-                type="button"
-                onClick={onAddGameRow}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 6,
-                  border: "none",
-                  background: "#2f7d32",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontSize: 12,
-                }}
-              >
-                新增一列
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={onAddGameRow}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    border: "none",
+                    background: "#2f7d32",
+                    color: "#fff",
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                >
+                  新增一列
+                </button>
+                <button
+                  type="button"
+                  onClick={onSaveCurrentVoteGames}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    border: "none",
+                    background: "#1565c0",
+                    color: "#fff",
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                >
+                  儲存本次遊戲清單
+                </button>
+              </div>
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
-                      勾選
-                    </th>
                     <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
                       遊戲名稱
                     </th>
@@ -686,13 +591,6 @@ export default function VoteRoomPage() {
                 <tbody>
                   {gameRows.map((row) => (
                     <tr key={row.id}>
-                      <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
-                        <input
-                          type="checkbox"
-                          checked={row.selected}
-                          onChange={() => onToggleGameRowSelected(row.id)}
-                        />
-                      </td>
                       <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
                         <input
                           type="text"
@@ -742,38 +640,21 @@ export default function VoteRoomPage() {
                         />
                       </td>
                       <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          <button
-                            type="button"
-                            onClick={() => onSaveGameRow(row.id)}
-                            style={{
-                              padding: "6px 10px",
-                              borderRadius: 6,
-                              border: "none",
-                              background: "#1565c0",
-                              color: "#fff",
-                              cursor: "pointer",
-                              fontSize: 12,
-                            }}
-                          >
-                            儲存
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onRemoveGameRow(row.id)}
-                            style={{
-                              padding: "6px 10px",
-                              borderRadius: 6,
-                              border: "none",
-                              background: "#d32f2f",
-                              color: "#fff",
-                              cursor: "pointer",
-                              fontSize: 12,
-                            }}
-                          >
-                            刪除
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveGameRow(row.id)}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 6,
+                            border: "none",
+                            background: "#d32f2f",
+                            color: "#fff",
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          刪除
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -783,47 +664,25 @@ export default function VoteRoomPage() {
           </div>
 
           <div style={{ display: "grid", gap: 8 }}>
-            <span>已儲存遊戲</span>
-            {savedGameOptions.length === 0 ? (
-              <p style={{ margin: 0, color: "#777" }}>尚未儲存任何遊戲</p>
+            <span>遊戲投票區</span>
+            {currentVoteGames.length === 0 ? (
+              <p style={{ margin: 0, color: "#777" }}>請先在上方表格填寫並儲存本次遊戲清單</p>
             ) : (
               <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
-                {savedGameOptions.map((option) => (
+                {currentVoteGames.map((option) => (
                   <li key={option.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span>
-                      {option.gameName}
-                      {option.gamePrice ? ` ｜ 價格：${option.gamePrice}` : ""}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onApplySavedGame(option)}
-                      style={{
-                        padding: "4px 8px",
-                        borderRadius: 6,
-                        border: "none",
-                        background: "#2f7d32",
-                        color: "#fff",
-                        cursor: "pointer",
-                        fontSize: 12,
-                      }}
-                    >
-                      加入表格
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteSavedGame(option.id)}
-                      style={{
-                        padding: "4px 8px",
-                        borderRadius: 6,
-                        border: "none",
-                        background: "#d32f2f",
-                        color: "#fff",
-                        cursor: "pointer",
-                        fontSize: 12,
-                      }}
-                    >
-                      刪除儲存
-                    </button>
+                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedGameIds.includes(option.id)}
+                        onChange={() => onToggleVoteGame(option.id)}
+                      />
+                      <span>
+                        {option.gameName}
+                        {option.gamePrice ? ` ｜ 價格：${option.gamePrice}` : ""}
+                        {option.gameUrl ? " ｜ 有網址" : ""}
+                      </span>
+                    </label>
                   </li>
                 ))}
               </ul>
