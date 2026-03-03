@@ -64,8 +64,6 @@ const parseGamePriceText = (value: unknown): string | null => {
   return "__INVALID__";
 };
 
-const isValidPriceText = (value: string) => /^\d+人\/\d+元$/.test(value);
-
 const formatVoteRoomError = (error: any, fallback: string) => {
   const message = String(error?.message || "");
   if (message.includes("vote_room_votes") || error?.code === "PGRST205") {
@@ -128,13 +126,6 @@ export async function POST(request: Request) {
     if (gamePrice === "__INVALID__") {
       return NextResponse.json(
         { success: false, error: "gamePrice 格式不正確" },
-        { status: 400 }
-      );
-    }
-
-    if (typeof gamePrice === "string" && !isValidPriceText(gamePrice)) {
-      return NextResponse.json(
-        { success: false, error: "gamePrice 格式需為 X人/XXXX元" },
         { status: 400 }
       );
     }
@@ -302,13 +293,6 @@ export async function PATCH(request: Request) {
     if (gamePrice === "__INVALID__") {
       return NextResponse.json(
         { success: false, error: "gamePrice 格式不正確" },
-        { status: 400 }
-      );
-    }
-
-    if (typeof gamePrice === "string" && !isValidPriceText(gamePrice)) {
-      return NextResponse.json(
-        { success: false, error: "gamePrice 格式需為 X人/XXXX元" },
         { status: 400 }
       );
     }

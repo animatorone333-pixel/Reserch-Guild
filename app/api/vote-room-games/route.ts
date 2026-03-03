@@ -15,8 +15,6 @@ interface VoteRoomGameInput {
   gamePrice?: unknown;
 }
 
-const isValidPriceText = (value: string) => /^\d+人\/\d+元$/.test(value);
-
 const formatError = (error: any, fallback: string) => {
   const message = String(error?.message || "");
   if (message.includes("vote_room_games") || error?.code === "PGRST205") {
@@ -92,12 +90,6 @@ export async function POST(request: Request) {
         }
       }
 
-      if (game.gamePrice && !isValidPriceText(game.gamePrice)) {
-        return NextResponse.json(
-          { success: false, error: `遊戲「${game.gameName}」的價格格式需為 X人/XXXX元` },
-          { status: 400 }
-        );
-      }
     }
 
     const { error: deleteError } = await supabase

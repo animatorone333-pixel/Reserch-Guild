@@ -29,14 +29,14 @@ interface VoteGameOption {
   gamePrice: string;
 }
 
+const ALL_GAMES_OPTION_ID = "__ALL_GAMES__";
+
 const createEmptyGameRow = (): GameInputRow => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   gameName: "",
   gameUrl: "",
   gamePrice: "",
 });
-
-const isValidPriceText = (value: string) => /^\d+人\/\d+元$/.test(value);
 
 const parseVoteDates = (vote: VoteRecord): string[] => {
   if (Array.isArray(vote.vote_days) && vote.vote_days.length > 0) {
@@ -236,14 +236,6 @@ export default function VoteRoomPage() {
       return;
     }
 
-    const invalidPriceRow = normalizedRows.find((row) => row.gamePrice && !isValidPriceText(row.gamePrice));
-    if (invalidPriceRow) {
-      const rowIndex = normalizedRows.findIndex((row) => row.id === invalidPriceRow.id) + 1;
-      setSuccessMessage("");
-      setError(`第 ${rowIndex} 列價格格式需為 X人/XXXX元`);
-      return;
-    }
-
     try {
       const response = await fetch("/api/vote-room-games", {
         method: "POST",
@@ -288,9 +280,30 @@ export default function VoteRoomPage() {
   };
 
   const onToggleVoteGame = (gameId: string) => {
-    setSelectedGameIds((prev) =>
-      prev.includes(gameId) ? prev.filter((id) => id !== gameId) : [...prev, gameId]
-    );
+    if (gameId === ALL_GAMES_OPTION_ID) {
+      setSelectedGameIds((prev) => {
+        if (prev.includes(ALL_GAMES_OPTION_ID)) {
+          return [];
+        }
+        return [ALL_GAMES_OPTION_ID, ...currentVoteGames.map((game) => game.id)];
+      });
+      return;
+    }
+
+    setSelectedGameIds((prev) => {
+      const hasTarget = prev.includes(gameId);
+      const next = hasTarget ? prev.filter((id) => id !== gameId) : [...prev, gameId];
+      const selectedWithoutAll = next.filter((id) => id !== ALL_GAMES_OPTION_ID);
+      const isAllSelected =
+        currentVoteGames.length > 0 &&
+        currentVoteGames.every((game) => selectedWithoutAll.includes(game.id));
+
+      if (isAllSelected) {
+        return [ALL_GAMES_OPTION_ID, ...selectedWithoutAll];
+      }
+
+      return selectedWithoutAll;
+    });
   };
 
   const onDeleteVoteGame = async (gameId: string) => {
@@ -350,7 +363,11 @@ export default function VoteRoomPage() {
       return;
     }
 
-    const submitRows = currentVoteGames.filter((game) => selectedGameIds.includes(game.id));
+    const isAllSelected = selectedGameIds.includes(ALL_GAMES_OPTION_ID);
+    const selectedIds = selectedGameIds.filter((id) => id !== ALL_GAMES_OPTION_ID);
+    const submitRows = isAllSelected
+      ? currentVoteGames
+      : currentVoteGames.filter((game) => selectedIds.includes(game.id));
     if (!submitRows.length) {
       setError("勾選的遊戲已失效，請重新勾選");
       return;
@@ -478,11 +495,6 @@ export default function VoteRoomPage() {
         setError("遊戲網址格式不正確");
         return;
       }
-    }
-
-    if (trimmedGamePrice && !isValidPriceText(trimmedGamePrice)) {
-      setError("價格格式需為 X人/XXXX元");
-      return;
     }
 
     setError("");
@@ -709,7 +721,7 @@ export default function VoteRoomPage() {
                           type="text"
                           value={row.gamePrice}
                           onChange={(e) => onChangeGameRow(row.id, "gamePrice", e.target.value)}
-                          placeholder="例如：4人/1580元"
+                        placeholder="例如：4人約1580、每人400、包場價等"
                           style={{
                             width: "100%",
                             padding: "10px 12px",
@@ -750,6 +762,16 @@ export default function VoteRoomPage() {
               <p style={{ margin: 0, color: "#777" }}>請先在上方表格填寫並儲存本次遊戲清單</p>
             ) : (
               <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
+                <li style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedGameIds.includes(ALL_GAMES_OPTION_ID)}
+                      onChange={() => onToggleVoteGame(ALL_GAMES_OPTION_ID)}
+                    />
+                    <span>以上皆可</span>
+                  </label>
+                </li>
                 {currentVoteGames.map((option) => (
                   <li key={option.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -954,7 +976,7 @@ export default function VoteRoomPage() {
                                     type="text"
                                     value={editingGamePrice}
                                     onChange={(e) => setEditingGamePrice(e.target.value)}
-                                    placeholder="例如：4人/1580元"
+                                    placeholder="例如：4人約1580、每人400、包場價等"
                                     style={{
                                       width: "100%",
                                       padding: "8px 10px",
