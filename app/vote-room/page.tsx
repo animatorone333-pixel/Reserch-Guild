@@ -23,6 +23,15 @@ interface GameInputRow {
   gamePrice: string;
 }
 
+interface SavedGameOption {
+  id: string;
+  gameName: string;
+  gameUrl: string;
+  gamePrice: string;
+}
+
+const SAVED_GAME_OPTIONS_STORAGE_KEY = "vote_room_saved_game_options_v1";
+
 const createEmptyGameRow = (): GameInputRow => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   selected: true,
@@ -30,6 +39,39 @@ const createEmptyGameRow = (): GameInputRow => ({
   gameUrl: "",
   gamePrice: "",
 });
+
+const loadSavedGameOptions = (): SavedGameOption[] => {
+  if (typeof window === "undefined") return [];
+
+  const raw = localStorage.getItem(SAVED_GAME_OPTIONS_STORAGE_KEY);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((item): item is SavedGameOption => {
+        return (
+          typeof item === "object" &&
+          item !== null &&
+          typeof item.id === "string" &&
+          typeof item.gameName === "string" &&
+          typeof item.gameUrl === "string" &&
+          typeof item.gamePrice === "string"
+        );
+      })
+      .map((item) => ({
+        ...item,
+        gameName: item.gameName.trim(),
+        gameUrl: item.gameUrl.trim(),
+        gamePrice: item.gamePrice.trim(),
+      }))
+      .filter((item) => item.gameName.length > 0);
+  } catch {
+    return [];
+  }
+};
 
 const parseVoteDates = (vote: VoteRecord): string[] => {
   if (Array.isArray(vote.vote_days) && vote.vote_days.length > 0) {
@@ -76,7 +118,9 @@ export default function VoteRoomPage() {
   const [voteDates, setVoteDates] = useState<string[]>(initialVoteDate ? [initialVoteDate] : []);
   const [agreeVote, setAgreeVote] = useState(false);
   const [votes, setVotes] = useState<VoteRecord[]>([]);
+  const [savedGameOptions, setSavedGameOptions] = useState<SavedGameOption[]>([]);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -110,7 +154,13 @@ export default function VoteRoomPage() {
 
   useEffect(() => {
     void loadVotes();
+    setSavedGameOptions(loadSavedGameOptions());
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(SAVED_GAME_OPTIONS_STORAGE_KEY, JSON.stringify(savedGameOptions));
+  }, [savedGameOptions]);
 
   const voteStats = useMemo(() => {
     const stats = new Map<string, number>();
@@ -167,8 +217,91 @@ export default function VoteRoomPage() {
     );
   };
 
+  const onSaveGameRow = (rowId: string) => {
+    const row = gameRows.find((item) => item.id === rowId);
+    if (!row) return;
+
+    const gameName = row.gameName.trim();
+    const gameUrl = row.gameUrl.trim();
+    const gamePrice = row.gamePrice.trim();
+
+    if (!gameName) {
+      setSuccessMessage("");
+      setError("請先填寫遊戲名稱再儲存");
+      return;
+    }
+
+    if (gameUrl) {
+      try {
+        new URL(gameUrl);
+      } catch {
+        setSuccessMessage("");
+        setError("遊戲網址格式不正確，無法儲存");
+        return;
+      }
+    }
+
+    if (gamePrice && Number.isNaN(Number(gamePrice))) {
+      setSuccessMessage("");
+      setError("價格需為數字，無法儲存");
+      return;
+    }
+
+    setSavedGameOptions((prev) => {
+      const duplicatedIndex = prev.findIndex(
+        (item) => item.gameName.trim().toLowerCase() === gameName.toLowerCase()
+      );
+
+      if (duplicatedIndex >= 0) {
+        const next = [...prev];
+        next[duplicatedIndex] = {
+          ...next[duplicatedIndex],
+          gameName,
+          gameUrl,
+          gamePrice,
+        };
+        return next;
+      }
+
+      return [
+        ...prev,
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          gameName,
+          gameUrl,
+          gamePrice,
+        },
+      ];
+    });
+
+    setError("");
+    setSuccessMessage(`已儲存：${gameName}`);
+  };
+
+  const onApplySavedGame = (option: SavedGameOption) => {
+    setGameRows((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        selected: true,
+        gameName: option.gameName,
+        gameUrl: option.gameUrl,
+        gamePrice: option.gamePrice,
+      },
+    ]);
+    setError("");
+    setSuccessMessage(`已加入：${option.gameName}`);
+  };
+
+  const onDeleteSavedGame = (optionId: string) => {
+    setSavedGameOptions((prev) => prev.filter((item) => item.id !== optionId));
+    setError("");
+    setSuccessMessage("已刪除儲存的遊戲");
+  };
+
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setSuccessMessage("");
 
     const trimmedVoterName = voterName.trim();
     const normalizedVoteDates = voteDates
@@ -295,6 +428,7 @@ export default function VoteRoomPage() {
     if (!confirmed) return;
 
     setError("");
+    setSuccessMessage("");
     setIsResetting(true);
     try {
       const response = await fetch("/api/vote-room", { method: "DELETE" });
@@ -317,6 +451,7 @@ export default function VoteRoomPage() {
 
   const onStartEditVote = (vote: VoteRecord) => {
     setError("");
+    setSuccessMessage("");
     setEditingVoteId(vote.id);
     setEditingGameName(vote.game_name);
     setEditingGameUrl(typeof vote.game_url === "string" ? vote.game_url : "");
@@ -379,6 +514,7 @@ export default function VoteRoomPage() {
     }
 
     setError("");
+    setSuccessMessage("");
     setIsSavingEdit(true);
     try {
       const response = await fetch("/api/vote-room", {
@@ -606,27 +742,92 @@ export default function VoteRoomPage() {
                         />
                       </td>
                       <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
-                        <button
-                          type="button"
-                          onClick={() => onRemoveGameRow(row.id)}
-                          style={{
-                            padding: "6px 10px",
-                            borderRadius: 6,
-                            border: "none",
-                            background: "#d32f2f",
-                            color: "#fff",
-                            cursor: "pointer",
-                            fontSize: 12,
-                          }}
-                        >
-                          刪除
-                        </button>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            onClick={() => onSaveGameRow(row.id)}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: 6,
+                              border: "none",
+                              background: "#1565c0",
+                              color: "#fff",
+                              cursor: "pointer",
+                              fontSize: 12,
+                            }}
+                          >
+                            儲存
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onRemoveGameRow(row.id)}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: 6,
+                              border: "none",
+                              background: "#d32f2f",
+                              color: "#fff",
+                              cursor: "pointer",
+                              fontSize: 12,
+                            }}
+                          >
+                            刪除
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div style={{ display: "grid", gap: 8 }}>
+            <span>已儲存遊戲</span>
+            {savedGameOptions.length === 0 ? (
+              <p style={{ margin: 0, color: "#777" }}>尚未儲存任何遊戲</p>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
+                {savedGameOptions.map((option) => (
+                  <li key={option.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span>
+                      {option.gameName}
+                      {option.gamePrice ? ` ｜ 價格：${option.gamePrice}` : ""}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onApplySavedGame(option)}
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 6,
+                        border: "none",
+                        background: "#2f7d32",
+                        color: "#fff",
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      加入表格
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteSavedGame(option.id)}
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 6,
+                        border: "none",
+                        background: "#d32f2f",
+                        color: "#fff",
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      刪除儲存
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <label style={{ display: "grid", gap: 6 }}>
@@ -656,6 +857,7 @@ export default function VoteRoomPage() {
           </label>
 
           {error && <p style={{ margin: 0, color: "#c62828" }}>{error}</p>}
+          {successMessage && <p style={{ margin: 0, color: "#2f7d32" }}>{successMessage}</p>}
 
           <button
             type="submit"
