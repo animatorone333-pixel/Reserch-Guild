@@ -29,6 +29,14 @@ interface VoteGameOption {
   gamePrice: string;
 }
 
+interface VoterSummary {
+  voterName: string;
+  voteIds: number[];
+  games: string[];
+  dates: string[];
+  latestTime: string;
+}
+
 const ALL_GAMES_OPTION_ID = "__ALL_GAMES__";
 
 const createEmptyGameRow = (): GameInputRow => ({
@@ -90,13 +98,10 @@ export default function VoteRoomPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [editingVoteId, setEditingVoteId] = useState<number | null>(null);
-  const [editingGameName, setEditingGameName] = useState("");
-  const [editingGameUrl, setEditingGameUrl] = useState("");
-  const [editingGamePrice, setEditingGamePrice] = useState("");
+  const [editingVoterName, setEditingVoterName] = useState<string | null>(null);
+  const [editingSelectedGames, setEditingSelectedGames] = useState<string[]>([]);
   const [editingVoteDates, setEditingVoteDates] = useState<string[]>(initialVoteDate ? [initialVoteDate] : []);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [deletingVoteId, setDeletingVoteId] = useState<number | null>(null);
 
   const loadVotes = async () => {
     setIsLoading(true);
@@ -165,6 +170,65 @@ export default function VoteRoomPage() {
 
     return Array.from(stats.entries()).sort((a, b) => b[1] - a[1]);
   }, [votes]);
+
+  const voterSummaries = useMemo<VoterSummary[]>(() => {
+    const grouped = new Map<
+      string,
+      { voteIds: number[]; games: Set<string>; dates: Set<string>; latestCreatedAt: string }
+    >();
+
+    votes.forEach((vote) => {
+      const voterName = vote.voter_name.trim() || "未命名";
+      const createdAt = typeof vote.created_at === "string" ? vote.created_at : "";
+      if (!grouped.has(voterName)) {
+        grouped.set(voterName, {
+          voteIds: [],
+          games: new Set<string>(),
+          dates: new Set<string>(),
+          latestCreatedAt: createdAt,
+        });
+      }
+
+      const target = grouped.get(voterName)!;
+      target.voteIds.push(vote.id);
+      if (vote.game_name.trim()) target.games.add(vote.game_name.trim());
+      parseVoteDates(vote).forEach((date) => target.dates.add(date));
+
+      if (createdAt && (!target.latestCreatedAt || createdAt > target.latestCreatedAt)) {
+        target.latestCreatedAt = createdAt;
+      }
+    });
+
+    return Array.from(grouped.entries())
+      .map(([voterName, info]) => {
+        const latestDate = new Date(info.latestCreatedAt);
+        const latestTime = Number.isNaN(latestDate.getTime())
+          ? "-"
+          : latestDate.toLocaleString("zh-TW", {
+              hour12: false,
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+
+        return {
+          voterName,
+          voteIds: info.voteIds,
+          games: Array.from(info.games),
+          dates: Array.from(info.dates),
+          latestTime,
+        };
+      })
+      .sort((a, b) => a.voterName.localeCompare(b.voterName, "zh-Hant"));
+  }, [votes]);
+
+  const selectableGameNames = useMemo(() => {
+    const fromCurrent = currentVoteGames.map((game) => game.gameName.trim());
+    const fromVotes = votes.map((vote) => vote.game_name.trim());
+    return Array.from(new Set([...fromCurrent, ...fromVotes].filter((name) => name.length > 0)));
+  }, [currentVoteGames, votes]);
 
 
   const onToggleVoteDate = (date: string) => {
@@ -365,9 +429,22 @@ export default function VoteRoomPage() {
 
     const isAllSelected = selectedGameIds.includes(ALL_GAMES_OPTION_ID);
     const selectedIds = selectedGameIds.filter((id) => id !== ALL_GAMES_OPTION_ID);
-    const submitRows = isAllSelected
+    let submitRows = isAllSelected
       ? currentVoteGames
       : currentVoteGames.filter((game) => selectedIds.includes(game.id));
+
+    if (isAllSelected) {
+      submitRows = [
+        ...submitRows,
+        {
+          id: ALL_GAMES_OPTION_ID,
+          gameName: "以上皆可",
+          gameUrl: "",
+          gamePrice: "",
+        },
+      ];
+    }
+
     if (!submitRows.length) {
       setError("勾選的遊戲已失效，請重新勾選");
       return;
@@ -438,43 +515,37 @@ export default function VoteRoomPage() {
     }
   };
 
-  const onStartEditVote = (vote: VoteRecord) => {
+  const onStartEditVoter = (summary: VoterSummary) => {
     setError("");
     setSuccessMessage("");
-    setEditingVoteId(vote.id);
-    setEditingGameName(vote.game_name);
-    setEditingGameUrl(typeof vote.game_url === "string" ? vote.game_url : "");
-    setEditingGamePrice(
-      typeof vote.game_price === "string"
-        ? vote.game_price
-        : ""
-    );
-    const normalizedVoteDates = parseVoteDates(vote);
-    setEditingVoteDates(normalizedVoteDates.length > 0 ? normalizedVoteDates : initialVoteDate ? [initialVoteDate] : []);
+    setEditingVoterName(summary.voterName);
+    setEditingSelectedGames(summary.games.filter((name) => name !== "以上皆可"));
+    setEditingVoteDates(summary.dates.length > 0 ? summary.dates : initialVoteDate ? [initialVoteDate] : []);
   };
 
-  const onCancelEditVote = () => {
-    setEditingVoteId(null);
-    setEditingGameName("");
-    setEditingGameUrl("");
-    setEditingGamePrice("");
+  const onCancelEditVoter = () => {
+    setEditingVoterName(null);
+    setEditingSelectedGames([]);
     setEditingVoteDates(initialVoteDate ? [initialVoteDate] : []);
     setIsSavingEdit(false);
-    setDeletingVoteId(null);
   };
 
-  const onSaveEditVote = async () => {
-    if (!editingVoteId) return;
+  const onToggleEditingGame = (gameName: string) => {
+    setEditingSelectedGames((prev) =>
+      prev.includes(gameName) ? prev.filter((item) => item !== gameName) : [...prev, gameName]
+    );
+  };
 
-    const trimmedGameName = editingGameName.trim();
-    const trimmedGameUrl = editingGameUrl.trim();
-    const trimmedGamePrice = editingGamePrice.trim();
+  const onSaveEditVoter = async () => {
+    const targetVoterName = editingVoterName?.trim() || "";
+    if (!targetVoterName) return;
+
     const normalizedVoteDates = editingVoteDates
       .map((date) => date.trim())
       .filter((date) => date.length > 0);
 
-    if (!trimmedGameName) {
-      setError("遊戲名稱不可為空");
+    if (!editingSelectedGames.length) {
+      setError("請至少選擇一個遊戲");
       return;
     }
 
@@ -488,67 +559,51 @@ export default function VoteRoomPage() {
       return;
     }
 
-    if (trimmedGameUrl) {
-      try {
-        new URL(trimmedGameUrl);
-      } catch {
-        setError("遊戲網址格式不正確");
-        return;
-      }
-    }
-
     setError("");
     setSuccessMessage("");
     setIsSavingEdit(true);
     try {
-      const response = await fetch("/api/vote-room", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editingVoteId,
-          gameName: trimmedGameName,
-          gameUrl: trimmedGameUrl,
-          gamePrice: trimmedGamePrice,
-          voteDates: normalizedVoteDates,
-        }),
-      });
+      const targetVotes = votes.filter((vote) => vote.voter_name.trim() === targetVoterName);
 
-      const result = await response.json();
-      if (!response.ok || !result?.success) {
-        throw new Error(result?.error || "修改投票失敗");
+      for (const vote of targetVotes) {
+        const deleteResponse = await fetch(`/api/vote-room?id=${vote.id}`, { method: "DELETE" });
+        const deleteResult = await deleteResponse.json();
+        if (!deleteResponse.ok || !deleteResult?.success) {
+          throw new Error(deleteResult?.error || "刪除舊投票失敗");
+        }
       }
 
-      onCancelEditVote();
+      for (const gameName of editingSelectedGames) {
+        const fromCurrent = currentVoteGames.find((game) => game.gameName === gameName);
+        const fromVotes = targetVotes.find((vote) => vote.game_name === gameName);
+        const gameUrl = fromCurrent?.gameUrl || (typeof fromVotes?.game_url === "string" ? fromVotes.game_url : "");
+        const gamePrice = fromCurrent?.gamePrice || (typeof fromVotes?.game_price === "string" ? fromVotes.game_price : "");
+
+        const createResponse = await fetch("/api/vote-room", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            gameName,
+            gameUrl,
+            gamePrice,
+            voterName: targetVoterName,
+            voteDates: normalizedVoteDates,
+            agreeVote: true,
+          }),
+        });
+        const createResult = await createResponse.json();
+        if (!createResponse.ok || !createResult?.success) {
+          throw new Error(createResult?.error || "重建投票失敗");
+        }
+      }
+
+      onCancelEditVoter();
       await loadVotes();
+      setSuccessMessage(`已更新 ${targetVoterName} 的投票`);
     } catch (e: any) {
       setError(e?.message || "修改投票失敗");
     } finally {
       setIsSavingEdit(false);
-    }
-  };
-
-  const onDeleteVote = async (voteId: number) => {
-    const confirmed = window.confirm("確定要刪除這筆投票紀錄嗎？");
-    if (!confirmed) return;
-
-    setError("");
-    setDeletingVoteId(voteId);
-    try {
-      const response = await fetch(`/api/vote-room?id=${voteId}`, { method: "DELETE" });
-      const result = await response.json();
-
-      if (!response.ok || !result?.success) {
-        throw new Error(result?.error || "刪除投票失敗");
-      }
-
-      if (editingVoteId === voteId) {
-        onCancelEditVote();
-      }
-      await loadVotes();
-    } catch (e: any) {
-      setError(e?.message || "刪除投票失敗");
-    } finally {
-      setDeletingVoteId(null);
     }
   };
 
@@ -868,47 +923,38 @@ export default function VoteRoomPage() {
           <h2 style={{ margin: "0 0 10px" }}>投票紀錄</h2>
           {isLoading ? (
             <p style={{ margin: 0, color: "#777" }}>載入中...</p>
-          ) : votes.length === 0 ? (
+          ) : voterSummaries.length === 0 ? (
             <p style={{ margin: 0, color: "#777" }}>目前沒有紀錄</p>
           ) : (
             <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
-              {votes.map((vote) => {
-                const isEditing = editingVoteId === vote.id;
+              {voterSummaries.map((summary) => {
+                const isEditing = editingVoterName === summary.voterName;
 
                 return (
-                  <li key={vote.id}>
+                  <li key={summary.voterName}>
                     {!isEditing ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                        <span>
-                          {vote.game_name}
-                          {vote.game_url ? (
-                            <>
-                              {" "}
-                              ｜
-                              {" "}
-                              <a href={vote.game_url} target="_blank" rel="noreferrer">
-                                連結
-                              </a>
-                            </>
-                          ) : null}
-                          {typeof vote.game_price === "string" && vote.game_price ? ` ｜ 價格：${vote.game_price}` : ""} ｜ {vote.voter_name} ｜ 日期：
-                          {parseVoteDates(vote).join(", ") || vote.created_at.slice(0, 10)} ｜ {vote.agree_vote ? "☑ 已勾選" : "☐ 未勾選"}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => onStartEditVote(vote)}
-                          style={{
-                            padding: "4px 8px",
-                            borderRadius: 6,
-                            border: "none",
-                            background: "#1976d2",
-                            color: "#fff",
-                            cursor: "pointer",
-                            fontSize: 12,
-                          }}
-                        >
-                          修改
-                        </button>
+                      <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10, background: "#fafafa" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
+                          <strong>{summary.voterName}</strong>
+                          <button
+                            type="button"
+                            onClick={() => onStartEditVoter(summary)}
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: 6,
+                              border: "none",
+                              background: "#1976d2",
+                              color: "#fff",
+                              cursor: "pointer",
+                              fontSize: 12,
+                            }}
+                          >
+                            修改
+                          </button>
+                        </div>
+                        <div>遊戲：{summary.games.join("、") || "-"}</div>
+                        <div>日期：{summary.dates.join("、") || "-"}</div>
+                        <div>投票時間：{summary.latestTime}</div>
                       </div>
                     ) : (
                       <div
@@ -921,77 +967,28 @@ export default function VoteRoomPage() {
                           background: "#fafafa",
                         }}
                       >
-                        <div style={{ fontSize: 13, color: "#555" }}>編輯：{vote.voter_name} 的投票</div>
-                        <div style={{ overflowX: "auto" }}>
-                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                            <thead>
-                              <tr>
-                                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
-                                  遊戲名稱
-                                </th>
-                                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
-                                  遊戲網址
-                                </th>
-                                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
-                                  價格
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                        <div style={{ fontSize: 13, color: "#555" }}>編輯：{summary.voterName} 的投票</div>
+                        <div style={{ display: "grid", gap: 8 }}>
+                          <div>遊戲（可複選）</div>
+                          {selectableGameNames.length === 0 ? (
+                            <p style={{ margin: 0, color: "#777" }}>目前沒有可選遊戲</p>
+                          ) : (
+                            <div style={{ display: "grid", gap: 6 }}>
+                              {selectableGameNames.map((gameName) => (
+                                <label key={gameName} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                                   <input
-                                    type="text"
-                                    value={editingGameName}
-                                    onChange={(e) => setEditingGameName(e.target.value)}
-                                    placeholder="請輸入遊戲名稱"
-                                    style={{
-                                      width: "100%",
-                                      padding: "8px 10px",
-                                      borderRadius: 8,
-                                      border: "1px solid #ccc",
-                                      color: "#000",
-                                      background: "#fff",
-                                    }}
+                                    type="checkbox"
+                                    checked={editingSelectedGames.includes(gameName)}
+                                    onChange={() => onToggleEditingGame(gameName)}
                                   />
-                                </td>
-                                <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
-                                  <input
-                                    type="url"
-                                    value={editingGameUrl}
-                                    onChange={(e) => setEditingGameUrl(e.target.value)}
-                                    placeholder="https://..."
-                                    style={{
-                                      width: "100%",
-                                      padding: "8px 10px",
-                                      borderRadius: 8,
-                                      border: "1px solid #ccc",
-                                      color: "#000",
-                                      background: "#fff",
-                                    }}
-                                  />
-                                </td>
-                                <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
-                                  <input
-                                    type="text"
-                                    value={editingGamePrice}
-                                    onChange={(e) => setEditingGamePrice(e.target.value)}
-                                    placeholder="例如：4人約1580、每人400、包場價等"
-                                    style={{
-                                      width: "100%",
-                                      padding: "8px 10px",
-                                      borderRadius: 8,
-                                      border: "1px solid #ccc",
-                                      color: "#000",
-                                      background: "#fff",
-                                    }}
-                                  />
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
+                                  {gameName}
+                                </label>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div style={{ display: "grid", gap: 8 }}>
+                          <div>日期（可複選）</div>
                           {marchSaturdayOptions.map((date) => (
                             <label key={date} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                               <input
@@ -1006,7 +1003,7 @@ export default function VoteRoomPage() {
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <button
                             type="button"
-                            onClick={() => void onSaveEditVote()}
+                            onClick={() => void onSaveEditVoter()}
                             disabled={isSavingEdit}
                             style={{
                               padding: "6px 10px",
@@ -1022,23 +1019,7 @@ export default function VoteRoomPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => void onDeleteVote(vote.id)}
-                            disabled={deletingVoteId === vote.id}
-                            style={{
-                              padding: "6px 10px",
-                              borderRadius: 6,
-                              border: "none",
-                              background: deletingVoteId === vote.id ? "#d8a1a1" : "#d32f2f",
-                              color: "#fff",
-                              cursor: deletingVoteId === vote.id ? "not-allowed" : "pointer",
-                              fontSize: 12,
-                            }}
-                          >
-                            {deletingVoteId === vote.id ? "刪除中..." : "刪除這筆"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={onCancelEditVote}
+                            onClick={onCancelEditVoter}
                             style={{
                               padding: "6px 10px",
                               borderRadius: 6,
