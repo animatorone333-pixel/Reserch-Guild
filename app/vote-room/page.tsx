@@ -876,21 +876,6 @@ export default function VoteRoomPage() {
                       />
                       <span>{option.gameName}</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => void onDeleteVoteGame(option.id)}
-                      style={{
-                        padding: "4px 8px",
-                        borderRadius: 6,
-                        border: "none",
-                        background: "#d32f2f",
-                        color: "#fff",
-                        cursor: "pointer",
-                        fontSize: 12,
-                      }}
-                    >
-                      刪除
-                    </button>
                   </li>
                 ))}
               </ul>
