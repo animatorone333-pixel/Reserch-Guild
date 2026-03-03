@@ -163,6 +163,8 @@ export default function VoteRoomPage() {
 
   const voteStats = useMemo(() => {
     const stats = new Map<string, number>();
+    stats.set("以上皆可", 0);
+
     votes.forEach((vote) => {
       const key = vote.game_name.trim();
       stats.set(key, (stats.get(key) ?? 0) + 1);
