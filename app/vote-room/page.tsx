@@ -6,31 +6,28 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 interface VoteRecord {
   id: number;
   game_name: string;
+  game_url?: string | null;
+  game_price?: number | null;
   voter_name: string;
   agree_vote: boolean;
   vote_day?: string;
+  vote_days?: string[] | null;
   created_at: string;
 }
 
-const GAME_OPTIONS_STORAGE_KEY = "escape_room_vote_game_options_v1";
-const GAME_OPTIONS_SCOPE = "vote-room";
-
-const loadGameOptions = (): string[] => {
-  if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(GAME_OPTIONS_STORAGE_KEY);
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .filter((item): item is string => typeof item === "string")
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0);
-  } catch {
-    return [];
+const parseVoteDates = (vote: VoteRecord): string[] => {
+  if (Array.isArray(vote.vote_days) && vote.vote_days.length > 0) {
+    return vote.vote_days
+      .filter((day): day is string => typeof day === "string")
+      .map((day) => day.trim())
+      .filter((day) => day.length > 0);
   }
+
+  if (typeof vote.vote_day === "string" && vote.vote_day.trim()) {
+    return [vote.vote_day.trim()];
+  }
+
+  return [];
 };
 
 export default function VoteRoomPage() {
@@ -59,20 +56,21 @@ export default function VoteRoomPage() {
 
   const initialVoteDate = marchSaturdayOptions[0] || "";
   const [gameName, setGameName] = useState("");
-  const [newGameName, setNewGameName] = useState("");
-  const [showAddGameModal, setShowAddGameModal] = useState(false);
+  const [gameUrl, setGameUrl] = useState("");
+  const [gamePrice, setGamePrice] = useState("");
   const [voterName, setVoterName] = useState("");
-  const [voteDate, setVoteDate] = useState(initialVoteDate);
+  const [voteDates, setVoteDates] = useState<string[]>(initialVoteDate ? [initialVoteDate] : []);
   const [agreeVote, setAgreeVote] = useState(false);
   const [votes, setVotes] = useState<VoteRecord[]>([]);
-  const [gameOptions, setGameOptions] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [editingVoteId, setEditingVoteId] = useState<number | null>(null);
   const [editingGameName, setEditingGameName] = useState("");
-  const [editingVoteDate, setEditingVoteDate] = useState(initialVoteDate);
+  const [editingGameUrl, setEditingGameUrl] = useState("");
+  const [editingGamePrice, setEditingGamePrice] = useState("");
+  const [editingVoteDates, setEditingVoteDates] = useState<string[]>(initialVoteDate ? [initialVoteDate] : []);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [deletingVoteId, setDeletingVoteId] = useState<number | null>(null);
 
@@ -96,34 +94,9 @@ export default function VoteRoomPage() {
     }
   };
 
-  const loadGameOptionsFromApi = async () => {
-    try {
-      const response = await fetch(`/api/vote-game-options?scope=${GAME_OPTIONS_SCOPE}`, {
-        cache: "no-store",
-      });
-      const result = await response.json();
-
-      if (!response.ok || !result?.success || !Array.isArray(result?.data)) {
-        throw new Error("讀取共用遊戲清單失敗");
-      }
-
-      setGameOptions(result.data);
-      return;
-    } catch {
-      setGameOptions(loadGameOptions());
-    }
-  };
-
   useEffect(() => {
     void loadVotes();
-    void loadGameOptionsFromApi();
   }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(GAME_OPTIONS_STORAGE_KEY, JSON.stringify(gameOptions));
-    }
-  }, [gameOptions]);
 
   const voteStats = useMemo(() => {
     const stats = new Map<string, number>();
@@ -135,98 +108,57 @@ export default function VoteRoomPage() {
     return Array.from(stats.entries()).sort((a, b) => b[1] - a[1]);
   }, [votes]);
 
-  const selectableGameNames = useMemo(() => {
-    const allNames = [...gameOptions, ...votes.map((vote) => vote.game_name)];
-    return Array.from(new Set(allNames.map((name) => name.trim()).filter((name) => name.length > 0)));
-  }, [gameOptions, votes]);
 
-  const onAddGameOption = async () => {
-    const trimmed = newGameName.trim();
-
-    if (!trimmed) {
-      setError("請先輸入要新增的遊戲名稱");
-      return;
-    }
-
-    if (gameOptions.some((name) => name.toLowerCase() === trimmed.toLowerCase())) {
-      setGameName(trimmed);
-      setNewGameName("");
-      setError("");
-      return;
-    }
-
-    try {
-      const response = await fetch("/api/vote-game-options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scope: GAME_OPTIONS_SCOPE,
-          optionName: trimmed,
-        }),
-      });
-
-      const result = await response.json();
-      if (!response.ok || !result?.success) {
-        throw new Error(result?.error || "新增遊戲失敗");
-      }
-
-      await loadGameOptionsFromApi();
-    } catch {
-      setGameOptions((prev) => [...prev, trimmed]);
-    }
-
-    setGameName(trimmed);
-    setNewGameName("");
-    setError("");
-    setShowAddGameModal(false);
+  const onToggleVoteDate = (date: string) => {
+    setVoteDates((prev) =>
+      prev.includes(date) ? prev.filter((item) => item !== date) : [...prev, date]
+    );
   };
 
-  const onDeleteGameOption = async (optionName: string) => {
-    try {
-      const response = await fetch("/api/vote-game-options", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scope: GAME_OPTIONS_SCOPE,
-          optionName,
-        }),
-      });
-
-      const result = await response.json();
-      if (!response.ok || !result?.success) {
-        throw new Error(result?.error || "刪除遊戲失敗");
-      }
-
-      await loadGameOptionsFromApi();
-    } catch {
-      setGameOptions((prev) => prev.filter((name) => name !== optionName));
-    }
-
-    if (gameName.trim() === optionName.trim()) {
-      setGameName("");
-    }
-    setError("");
+  const onToggleEditingVoteDate = (date: string) => {
+    setEditingVoteDates((prev) =>
+      prev.includes(date) ? prev.filter((item) => item !== date) : [...prev, date]
+    );
   };
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     const trimmedGameName = gameName.trim();
+    const trimmedGameUrl = gameUrl.trim();
+    const trimmedGamePrice = gamePrice.trim();
     const trimmedVoterName = voterName.trim();
-    const trimmedVoteDate = voteDate.trim();
+    const normalizedVoteDates = voteDates
+      .map((date) => date.trim())
+      .filter((date) => date.length > 0);
 
     if (!trimmedGameName || !trimmedVoterName) {
       setError("請填寫遊戲名稱與姓名");
       return;
     }
 
-    if (!trimmedVoteDate) {
-      setError("請選擇投票日期");
+    if (!normalizedVoteDates.length) {
+      setError("請至少選擇一個投票日期");
       return;
     }
 
-    if (!marchSaturdayOptions.includes(trimmedVoteDate)) {
-      setError("投票日期僅能選擇 3 月的星期六");
+    const hasInvalidDate = normalizedVoteDates.some((date) => !marchSaturdayOptions.includes(date));
+    if (hasInvalidDate) {
+      setError("投票日期僅能選擇 2026 年 3 月的星期六");
+      return;
+    }
+
+    if (trimmedGameUrl) {
+      try {
+        new URL(trimmedGameUrl);
+      } catch {
+        setError("遊戲網址格式不正確");
+        return;
+      }
+    }
+
+    if (trimmedGamePrice && Number.isNaN(Number(trimmedGamePrice))) {
+      setError("價格需為數字");
       return;
     }
 
@@ -243,8 +175,10 @@ export default function VoteRoomPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           gameName: trimmedGameName,
+          gameUrl: trimmedGameUrl,
+          gamePrice: trimmedGamePrice,
           voterName: trimmedVoterName,
-          voteDate: trimmedVoteDate,
+          voteDates: normalizedVoteDates,
           agreeVote,
         }),
       });
@@ -255,9 +189,11 @@ export default function VoteRoomPage() {
       }
 
       setGameName("");
+      setGameUrl("");
+      setGamePrice("");
       setVoterName("");
       setAgreeVote(false);
-      setVoteDate(initialVoteDate);
+      setVoteDates(initialVoteDate ? [initialVoteDate] : []);
       await loadVotes();
     } catch (e: any) {
       setError(e?.message || "投票失敗");
@@ -281,8 +217,11 @@ export default function VoteRoomPage() {
 
       setVotes([]);
       setGameName("");
+      setGameUrl("");
+      setGamePrice("");
       setVoterName("");
       setAgreeVote(false);
+      setVoteDates(initialVoteDate ? [initialVoteDate] : []);
     } catch (e: any) {
       setError(e?.message || "重新投票失敗");
     } finally {
@@ -294,13 +233,22 @@ export default function VoteRoomPage() {
     setError("");
     setEditingVoteId(vote.id);
     setEditingGameName(vote.game_name);
-    setEditingVoteDate(vote.vote_day || initialVoteDate);
+    setEditingGameUrl(typeof vote.game_url === "string" ? vote.game_url : "");
+    setEditingGamePrice(
+      typeof vote.game_price === "number" && Number.isFinite(vote.game_price)
+        ? String(vote.game_price)
+        : ""
+    );
+    const normalizedVoteDates = parseVoteDates(vote);
+    setEditingVoteDates(normalizedVoteDates.length > 0 ? normalizedVoteDates : initialVoteDate ? [initialVoteDate] : []);
   };
 
   const onCancelEditVote = () => {
     setEditingVoteId(null);
     setEditingGameName("");
-    setEditingVoteDate(initialVoteDate);
+    setEditingGameUrl("");
+    setEditingGamePrice("");
+    setEditingVoteDates(initialVoteDate ? [initialVoteDate] : []);
     setIsSavingEdit(false);
     setDeletingVoteId(null);
   };
@@ -309,15 +257,38 @@ export default function VoteRoomPage() {
     if (!editingVoteId) return;
 
     const trimmedGameName = editingGameName.trim();
-    const trimmedVoteDate = editingVoteDate.trim();
+    const trimmedGameUrl = editingGameUrl.trim();
+    const trimmedGamePrice = editingGamePrice.trim();
+    const normalizedVoteDates = editingVoteDates
+      .map((date) => date.trim())
+      .filter((date) => date.length > 0);
 
     if (!trimmedGameName) {
       setError("遊戲名稱不可為空");
       return;
     }
 
-    if (!marchSaturdayOptions.includes(trimmedVoteDate)) {
+    if (!normalizedVoteDates.length) {
+      setError("請至少選擇一個投票日期");
+      return;
+    }
+
+    if (normalizedVoteDates.some((date) => !marchSaturdayOptions.includes(date))) {
       setError("投票日期僅能選擇 2026 年 3 月的星期六");
+      return;
+    }
+
+    if (trimmedGameUrl) {
+      try {
+        new URL(trimmedGameUrl);
+      } catch {
+        setError("遊戲網址格式不正確");
+        return;
+      }
+    }
+
+    if (trimmedGamePrice && Number.isNaN(Number(trimmedGamePrice))) {
+      setError("價格需為數字");
       return;
     }
 
@@ -330,7 +301,9 @@ export default function VoteRoomPage() {
         body: JSON.stringify({
           id: editingVoteId,
           gameName: trimmedGameName,
-          voteDate: trimmedVoteDate,
+          gameUrl: trimmedGameUrl,
+          gamePrice: trimmedGamePrice,
+          voteDates: normalizedVoteDates,
         }),
       });
 
@@ -432,83 +405,94 @@ export default function VoteRoomPage() {
         </div>
 
         <section style={{ marginBottom: 24 }}>
-          <h2 style={{ margin: "0 0 10px" }}>可選遊戲清單</h2>
-          <button
-            type="button"
-            onClick={() => setShowAddGameModal(true)}
-            style={{
-              marginBottom: 10,
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: "none",
-              background: "#2f7d32",
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            新增遊戲（跳窗）
-          </button>
-
-          {selectableGameNames.length === 0 ? (
-            <p style={{ margin: 0, color: "#777" }}>目前還沒有可選遊戲，請先新增。</p>
-          ) : (
-            <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
-              {selectableGameNames.map((name) => (
-                <li
-                  key={name}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 10,
-                  }}
-                >
-                  <span>{name}</span>
-                  <button
-                    type="button"
-                    onClick={() => void onDeleteGameOption(name)}
-                    style={{
-                      padding: "4px 8px",
-                      borderRadius: 6,
-                      border: "none",
-                      background: "#d32f2f",
-                      color: "#fff",
-                      cursor: "pointer",
-                      fontSize: 12,
-                    }}
-                  >
-                    刪除
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <h2 style={{ margin: "0 0 10px" }}>投票日期（可複選）</h2>
+          <div style={{ display: "grid", gap: 8 }}>
+            {marchSaturdayOptions.map((date) => (
+              <label key={date} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={voteDates.includes(date)}
+                  onChange={() => onToggleVoteDate(date)}
+                />
+                {date}
+              </label>
+            ))}
+          </div>
         </section>
 
         <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginBottom: 24 }}>
-          <label style={{ display: "grid", gap: 6 }}>
-            遊戲名稱
-            <input
-              type="text"
-              value={gameName}
-              onChange={(e) => setGameName(e.target.value)}
-              list="escape-room-game-options"
-              placeholder="例如：奪魂鋸密室、古宅劇本殺"
-              style={{
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "1px solid #ccc",
-                color: "#000",
-                background: "#fff",
-              }}
-            />
-            <datalist id="escape-room-game-options">
-              {selectableGameNames.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-          </label>
+          <div style={{ display: "grid", gap: 6 }}>
+            <span>遊戲資訊（表格）</span>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
+                      遊戲名稱
+                    </th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
+                      遊戲網址
+                    </th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
+                      價格
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                      <input
+                        type="text"
+                        value={gameName}
+                        onChange={(e) => setGameName(e.target.value)}
+                        placeholder="例如：奪魂鋸密室"
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          border: "1px solid #ccc",
+                          color: "#000",
+                          background: "#fff",
+                        }}
+                      />
+                    </td>
+                    <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                      <input
+                        type="url"
+                        value={gameUrl}
+                        onChange={(e) => setGameUrl(e.target.value)}
+                        placeholder="https://..."
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          border: "1px solid #ccc",
+                          color: "#000",
+                          background: "#fff",
+                        }}
+                      />
+                    </td>
+                    <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                      <input
+                        type="text"
+                        value={gamePrice}
+                        onChange={(e) => setGamePrice(e.target.value)}
+                        placeholder="例如：800"
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          border: "1px solid #ccc",
+                          color: "#000",
+                          background: "#fff",
+                        }}
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           <label style={{ display: "grid", gap: 6 }}>
             姓名
@@ -525,27 +509,6 @@ export default function VoteRoomPage() {
                 background: "#fff",
               }}
             />
-          </label>
-
-          <label style={{ display: "grid", gap: 6 }}>
-            投票日期
-            <select
-              value={voteDate}
-              onChange={(e) => setVoteDate(e.target.value)}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "1px solid #ccc",
-                color: "#000",
-                background: "#fff",
-              }}
-            >
-              {marchSaturdayOptions.map((date) => (
-                <option key={date} value={date}>
-                  {date}
-                </option>
-              ))}
-            </select>
           </label>
 
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -607,7 +570,19 @@ export default function VoteRoomPage() {
                     {!isEditing ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                         <span>
-                          {vote.game_name} ｜ {vote.voter_name} ｜ 日期：{vote.vote_day || vote.created_at.slice(0, 10)} ｜ {vote.agree_vote ? "☑ 已勾選" : "☐ 未勾選"}
+                          {vote.game_name}
+                          {vote.game_url ? (
+                            <>
+                              {" "}
+                              ｜
+                              {" "}
+                              <a href={vote.game_url} target="_blank" rel="noreferrer">
+                                連結
+                              </a>
+                            </>
+                          ) : null}
+                          {typeof vote.game_price === "number" ? ` ｜ 價格：${vote.game_price}` : ""} ｜ {vote.voter_name} ｜ 日期：
+                          {parseVoteDates(vote).join(", ") || vote.created_at.slice(0, 10)} ｜ {vote.agree_vote ? "☑ 已勾選" : "☐ 未勾選"}
                         </span>
                         <button
                           type="button"
@@ -637,37 +612,87 @@ export default function VoteRoomPage() {
                         }}
                       >
                         <div style={{ fontSize: 13, color: "#555" }}>編輯：{vote.voter_name} 的投票</div>
-                        <input
-                          type="text"
-                          value={editingGameName}
-                          onChange={(e) => setEditingGameName(e.target.value)}
-                          list="escape-room-game-options"
-                          placeholder="請輸入遊戲名稱"
-                          style={{
-                            padding: "8px 10px",
-                            borderRadius: 8,
-                            border: "1px solid #ccc",
-                            color: "#000",
-                            background: "#fff",
-                          }}
-                        />
-                        <select
-                          value={editingVoteDate}
-                          onChange={(e) => setEditingVoteDate(e.target.value)}
-                          style={{
-                            padding: "8px 10px",
-                            borderRadius: 8,
-                            border: "1px solid #ccc",
-                            color: "#000",
-                            background: "#fff",
-                          }}
-                        >
+                        <div style={{ overflowX: "auto" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                            <thead>
+                              <tr>
+                                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
+                                  遊戲名稱
+                                </th>
+                                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
+                                  遊戲網址
+                                </th>
+                                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
+                                  價格
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                                  <input
+                                    type="text"
+                                    value={editingGameName}
+                                    onChange={(e) => setEditingGameName(e.target.value)}
+                                    placeholder="請輸入遊戲名稱"
+                                    style={{
+                                      width: "100%",
+                                      padding: "8px 10px",
+                                      borderRadius: 8,
+                                      border: "1px solid #ccc",
+                                      color: "#000",
+                                      background: "#fff",
+                                    }}
+                                  />
+                                </td>
+                                <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                                  <input
+                                    type="url"
+                                    value={editingGameUrl}
+                                    onChange={(e) => setEditingGameUrl(e.target.value)}
+                                    placeholder="https://..."
+                                    style={{
+                                      width: "100%",
+                                      padding: "8px 10px",
+                                      borderRadius: 8,
+                                      border: "1px solid #ccc",
+                                      color: "#000",
+                                      background: "#fff",
+                                    }}
+                                  />
+                                </td>
+                                <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                                  <input
+                                    type="text"
+                                    value={editingGamePrice}
+                                    onChange={(e) => setEditingGamePrice(e.target.value)}
+                                    placeholder="例如：800"
+                                    style={{
+                                      width: "100%",
+                                      padding: "8px 10px",
+                                      borderRadius: 8,
+                                      border: "1px solid #ccc",
+                                      color: "#000",
+                                      background: "#fff",
+                                    }}
+                                  />
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                        <div style={{ display: "grid", gap: 8 }}>
                           {marchSaturdayOptions.map((date) => (
-                            <option key={date} value={date}>
+                            <label key={date} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <input
+                                type="checkbox"
+                                checked={editingVoteDates.includes(date)}
+                                onChange={() => onToggleEditingVoteDate(date)}
+                              />
                               {date}
-                            </option>
+                            </label>
                           ))}
-                        </select>
+                        </div>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <button
                             type="button"
@@ -725,82 +750,6 @@ export default function VoteRoomPage() {
             </ul>
           )}
         </section>
-
-        {showAddGameModal && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.45)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 9999,
-            }}
-          >
-            <div
-              style={{
-                width: "min(460px, 92vw)",
-                background: "#fff",
-                borderRadius: 12,
-                padding: 18,
-                boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-              }}
-            >
-              <h3 style={{ marginTop: 0, marginBottom: 10 }}>新增可選遊戲</h3>
-              <input
-                autoFocus
-                value={newGameName}
-                onChange={(e) => setNewGameName(e.target.value)}
-                placeholder="例如：古宅驚魂"
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  border: "1px solid #ccc",
-                  color: "#000",
-                  background: "#fff",
-                  marginBottom: 12,
-                }}
-              />
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddGameModal(false);
-                    setNewGameName("");
-                  }}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: 8,
-                    border: "1px solid #ccc",
-                    background: "#fff",
-                    color: "#222",
-                    cursor: "pointer",
-                  }}
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void onAddGameOption()}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: "#2f7d32",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
-                >
-                  確認新增
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </main>
   );

@@ -9,20 +9,66 @@ const supabase = hasSupabase
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 
+interface ExistingVoteRecord {
+  id: number;
+  vote_day?: string | null;
+  vote_days?: string[] | null;
+}
+
 const isValidDateString = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
-const isWeekendDate = (value: string) => {
-  const [year, month, dayOfMonth] = value.split("-").map(Number);
-  if (!year || !month || !dayOfMonth) return false;
-  const date = new Date(Date.UTC(year, month - 1, dayOfMonth));
-  const day = date.getUTCDay();
-  return day === 0 || day === 6;
-};
 
 const isMarch2026Saturday = (value: string) => {
   const [year, month, dayOfMonth] = value.split("-").map(Number);
   if (year !== 2026 || month !== 3 || !dayOfMonth) return false;
   const date = new Date(Date.UTC(year, month - 1, dayOfMonth));
   return date.getUTCDay() === 6;
+};
+
+const parseVoteDatesPayload = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+
+  const uniqueDates = new Set<string>();
+  value.forEach((item) => {
+    if (typeof item !== "string") return;
+    const normalized = item.trim();
+    if (!normalized) return;
+    uniqueDates.add(normalized);
+  });
+
+  return Array.from(uniqueDates);
+};
+
+const normalizeExistingVoteDates = (row: ExistingVoteRecord): string[] => {
+  if (Array.isArray(row.vote_days) && row.vote_days.length > 0) {
+    return row.vote_days
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+
+  if (typeof row.vote_day === "string" && row.vote_day.trim()) {
+    return [row.vote_day.trim()];
+  }
+
+  return [];
+};
+
+const parseGamePrice = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value < 0) return NaN;
+    return Number(value.toFixed(2));
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) return NaN;
+    return Number(parsed.toFixed(2));
+  }
+
+  return NaN;
 };
 
 const formatVoteRoomError = (error: any, fallback: string) => {
@@ -41,7 +87,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from("vote_room_votes")
-      .select("id, game_name, voter_name, agree_vote, vote_day, created_at")
+      .select("id, game_name, game_url, game_price, voter_name, agree_vote, vote_day, vote_days, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -64,10 +110,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const gameName = typeof body?.gameName === "string" ? body.gameName.trim() : "";
+    const gameUrl = typeof body?.gameUrl === "string" ? body.gameUrl.trim() : "";
+    const gamePrice = parseGamePrice(body?.gamePrice);
     const voterName = typeof body?.voterName === "string" ? body.voterName.trim() : "";
     const agreeVote = body?.agreeVote === true;
-    const requestedVoteDay = typeof body?.voteDate === "string" ? body.voteDate.trim() : "";
-    const voteDay = requestedVoteDay || new Date().toISOString().slice(0, 10);
+    const voteDates = parseVoteDatesPayload(body?.voteDates);
 
     if (!gameName || !voterName) {
       return NextResponse.json(
@@ -83,36 +130,81 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!isValidDateString(voteDay)) {
+    if (Number.isNaN(gamePrice)) {
       return NextResponse.json(
-        { success: false, error: "voteDate 格式需為 YYYY-MM-DD" },
+        { success: false, error: "gamePrice 必須是大於等於 0 的數字" },
         { status: 400 }
       );
     }
 
-    if (!isWeekendDate(voteDay)) {
+    if (gameUrl) {
+      try {
+        new URL(gameUrl);
+      } catch {
+        return NextResponse.json(
+          { success: false, error: "gameUrl 格式不正確" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (!voteDates.length) {
       return NextResponse.json(
-        { success: false, error: "投票日期只允許週六或週日" },
+        { success: false, error: "voteDates 至少要選擇一個日期" },
         { status: 400 }
       );
     }
 
-    if (!isMarch2026Saturday(voteDay)) {
+    if (voteDates.some((date) => !isValidDateString(date))) {
       return NextResponse.json(
-        { success: false, error: "投票日期僅允許 2026 年 3 月的星期六" },
+        { success: false, error: "voteDates 的日期格式需為 YYYY-MM-DD" },
         { status: 400 }
       );
     }
+
+    if (voteDates.some((date) => !isMarch2026Saturday(date))) {
+      return NextResponse.json(
+        { success: false, error: "voteDates 僅允許 2026 年 3 月的星期六" },
+        { status: 400 }
+      );
+    }
+
+    const { data: existingVotes, error: existingVotesError } = await supabase
+      .from("vote_room_votes")
+      .select("id, vote_day, vote_days")
+      .ilike("game_name", gameName)
+      .ilike("voter_name", voterName)
+      .limit(200);
+
+    if (existingVotesError) throw existingVotesError;
+
+    const requestedDates = new Set(voteDates);
+    const hasDateConflict = (existingVotes ?? []).some((row: ExistingVoteRecord) => {
+      const existingDates = normalizeExistingVoteDates(row);
+      return existingDates.some((date) => requestedDates.has(date));
+    });
+
+    if (hasDateConflict) {
+      return NextResponse.json(
+        { success: false, error: "你在所選日期中，已有同姓名與同遊戲的投票紀錄。" },
+        { status: 409 }
+      );
+    }
+
+    const primaryVoteDay = voteDates[0];
 
     const { data, error } = await supabase
       .from("vote_room_votes")
       .insert({
         game_name: gameName,
+        game_url: gameUrl || null,
+        game_price: gamePrice,
         voter_name: voterName,
         agree_vote: true,
-        vote_day: voteDay,
+        vote_day: primaryVoteDay,
+        vote_days: voteDates,
       })
-      .select("id, game_name, voter_name, agree_vote, vote_day, created_at")
+      .select("id, game_name, game_url, game_price, voter_name, agree_vote, vote_day, vote_days, created_at")
       .single();
 
     if (error) {
@@ -187,7 +279,9 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const voteId = Number(body?.id);
     const gameName = typeof body?.gameName === "string" ? body.gameName.trim() : "";
-    const voteDate = typeof body?.voteDate === "string" ? body.voteDate.trim() : "";
+    const gameUrl = typeof body?.gameUrl === "string" ? body.gameUrl.trim() : "";
+    const gamePrice = parseGamePrice(body?.gamePrice);
+    const voteDates = parseVoteDatesPayload(body?.voteDates);
 
     if (!Number.isInteger(voteId) || voteId <= 0) {
       return NextResponse.json(
@@ -203,25 +297,89 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (!isValidDateString(voteDate)) {
+    if (Number.isNaN(gamePrice)) {
       return NextResponse.json(
-        { success: false, error: "voteDate 格式需為 YYYY-MM-DD" },
+        { success: false, error: "gamePrice 必須是大於等於 0 的數字" },
         { status: 400 }
       );
     }
 
-    if (!isMarch2026Saturday(voteDate)) {
+    if (gameUrl) {
+      try {
+        new URL(gameUrl);
+      } catch {
+        return NextResponse.json(
+          { success: false, error: "gameUrl 格式不正確" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (!voteDates.length) {
+      return NextResponse.json(
+        { success: false, error: "voteDates 至少要選擇一個日期" },
+        { status: 400 }
+      );
+    }
+
+    if (voteDates.some((date) => !isValidDateString(date))) {
+      return NextResponse.json(
+        { success: false, error: "voteDates 的日期格式需為 YYYY-MM-DD" },
+        { status: 400 }
+      );
+    }
+
+    if (voteDates.some((date) => !isMarch2026Saturday(date))) {
       return NextResponse.json(
         { success: false, error: "投票日期僅允許 2026 年 3 月的星期六" },
         { status: 400 }
       );
     }
 
+    const { data: targetVote, error: targetVoteError } = await supabase
+      .from("vote_room_votes")
+      .select("id, voter_name")
+      .eq("id", voteId)
+      .single();
+
+    if (targetVoteError) throw targetVoteError;
+
+    const { data: existingVotes, error: existingVotesError } = await supabase
+      .from("vote_room_votes")
+      .select("id, vote_day, vote_days")
+      .ilike("game_name", gameName)
+      .ilike("voter_name", String((targetVote as any)?.voter_name || ""))
+      .neq("id", voteId)
+      .limit(200);
+
+    if (existingVotesError) throw existingVotesError;
+
+    const requestedDates = new Set(voteDates);
+    const hasDateConflict = (existingVotes ?? []).some((row: ExistingVoteRecord) => {
+      const existingDates = normalizeExistingVoteDates(row);
+      return existingDates.some((date) => requestedDates.has(date));
+    });
+
+    if (hasDateConflict) {
+      return NextResponse.json(
+        { success: false, error: "該投票者在所選日期中已投過此遊戲，請調整後再試。" },
+        { status: 409 }
+      );
+    }
+
+    const primaryVoteDay = voteDates[0];
+
     const { data, error } = await supabase
       .from("vote_room_votes")
-      .update({ game_name: gameName, vote_day: voteDate })
+      .update({
+        game_name: gameName,
+        game_url: gameUrl || null,
+        game_price: gamePrice,
+        vote_day: primaryVoteDay,
+        vote_days: voteDates,
+      })
       .eq("id", voteId)
-      .select("id, game_name, voter_name, agree_vote, vote_day, created_at")
+      .select("id, game_name, game_url, game_price, voter_name, agree_vote, vote_day, vote_days, created_at")
       .single();
 
     if (error) {
