@@ -351,24 +351,17 @@ export default function VoteRoomPage() {
         if (prev.includes(ALL_GAMES_OPTION_ID)) {
           return [];
         }
-        return [ALL_GAMES_OPTION_ID, ...currentVoteGames.map((game) => game.id)];
+        return [ALL_GAMES_OPTION_ID];
       });
       return;
     }
 
     setSelectedGameIds((prev) => {
+      const prevWithoutAll = prev.filter((id) => id !== ALL_GAMES_OPTION_ID);
       const hasTarget = prev.includes(gameId);
-      const next = hasTarget ? prev.filter((id) => id !== gameId) : [...prev, gameId];
-      const selectedWithoutAll = next.filter((id) => id !== ALL_GAMES_OPTION_ID);
-      const isAllSelected =
-        currentVoteGames.length > 0 &&
-        currentVoteGames.every((game) => selectedWithoutAll.includes(game.id));
-
-      if (isAllSelected) {
-        return [ALL_GAMES_OPTION_ID, ...selectedWithoutAll];
-      }
-
-      return selectedWithoutAll;
+      return hasTarget
+        ? prevWithoutAll.filter((id) => id !== gameId)
+        : [...prevWithoutAll, gameId];
     });
   };
 
@@ -437,7 +430,6 @@ export default function VoteRoomPage() {
 
     if (isAllSelected) {
       submitRows = [
-        ...submitRows,
         {
           id: ALL_GAMES_OPTION_ID,
           gameName: "以上皆可",
