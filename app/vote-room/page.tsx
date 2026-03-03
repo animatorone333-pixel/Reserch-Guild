@@ -173,6 +173,7 @@ export default function VoteRoomPage() {
         games: Set<string>;
         dates: Set<string>;
         times: Set<string>;
+        recordCount: number;
       }
     >();
 
@@ -183,10 +184,12 @@ export default function VoteRoomPage() {
           games: new Set<string>(),
           dates: new Set<string>(),
           times: new Set<string>(),
+          recordCount: 0,
         });
       }
 
       const target = summaryMap.get(voterKey)!;
+      target.recordCount += 1;
       if (vote.game_name.trim()) {
         target.games.add(vote.game_name.trim());
       }
@@ -213,6 +216,7 @@ export default function VoteRoomPage() {
         games: Array.from(info.games),
         dates: Array.from(info.dates),
         times: Array.from(info.times),
+        recordCount: info.recordCount,
       }))
       .sort((a, b) => a.voterName.localeCompare(b.voterName, "zh-Hant"));
   }, [votes]);
@@ -937,195 +941,22 @@ export default function VoteRoomPage() {
           <h2 style={{ margin: "0 0 10px" }}>投票紀錄</h2>
           {isLoading ? (
             <p style={{ margin: 0, color: "#777" }}>載入中...</p>
-          ) : votes.length === 0 ? (
+          ) : personalVoteSummaries.length === 0 ? (
             <p style={{ margin: 0, color: "#777" }}>目前沒有紀錄</p>
           ) : (
             <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
-              {votes.map((vote) => {
-                const isEditing = editingVoteId === vote.id;
-
-                return (
-                  <li key={vote.id}>
-                    {!isEditing ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                        <span>
-                          {vote.game_name}
-                          {vote.game_url ? (
-                            <>
-                              {" "}
-                              ｜
-                              {" "}
-                              <a href={vote.game_url} target="_blank" rel="noreferrer">
-                                連結
-                              </a>
-                            </>
-                          ) : null}
-                          {typeof vote.game_price === "string" && vote.game_price ? ` ｜ 價格：${vote.game_price}` : ""} ｜ {vote.voter_name} ｜ 日期：
-                          {parseVoteDates(vote).join(", ") || vote.created_at.slice(0, 10)} ｜ {vote.agree_vote ? "☑ 已勾選" : "☐ 未勾選"}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => onStartEditVote(vote)}
-                          style={{
-                            padding: "4px 8px",
-                            borderRadius: 6,
-                            border: "none",
-                            background: "#1976d2",
-                            color: "#fff",
-                            cursor: "pointer",
-                            fontSize: 12,
-                          }}
-                        >
-                          修改
-                        </button>
-                      </div>
-                    ) : (
-                      <div
-                        style={{
-                          display: "grid",
-                          gap: 8,
-                          border: "1px solid #ddd",
-                          borderRadius: 8,
-                          padding: 10,
-                          background: "#fafafa",
-                        }}
-                      >
-                        <div style={{ fontSize: 13, color: "#555" }}>編輯：{vote.voter_name} 的投票</div>
-                        <div style={{ overflowX: "auto" }}>
-                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                            <thead>
-                              <tr>
-                                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
-                                  遊戲名稱
-                                </th>
-                                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
-                                  遊戲網址
-                                </th>
-                                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
-                                  價格
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
-                                  <input
-                                    type="text"
-                                    value={editingGameName}
-                                    onChange={(e) => setEditingGameName(e.target.value)}
-                                    placeholder="請輸入遊戲名稱"
-                                    style={{
-                                      width: "100%",
-                                      padding: "8px 10px",
-                                      borderRadius: 8,
-                                      border: "1px solid #ccc",
-                                      color: "#000",
-                                      background: "#fff",
-                                    }}
-                                  />
-                                </td>
-                                <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
-                                  <input
-                                    type="url"
-                                    value={editingGameUrl}
-                                    onChange={(e) => setEditingGameUrl(e.target.value)}
-                                    placeholder="https://..."
-                                    style={{
-                                      width: "100%",
-                                      padding: "8px 10px",
-                                      borderRadius: 8,
-                                      border: "1px solid #ccc",
-                                      color: "#000",
-                                      background: "#fff",
-                                    }}
-                                  />
-                                </td>
-                                <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
-                                  <input
-                                    type="text"
-                                    value={editingGamePrice}
-                                    onChange={(e) => setEditingGamePrice(e.target.value)}
-                                    placeholder="例如：4人約1580、每人400、包場價等"
-                                    style={{
-                                      width: "100%",
-                                      padding: "8px 10px",
-                                      borderRadius: 8,
-                                      border: "1px solid #ccc",
-                                      color: "#000",
-                                      background: "#fff",
-                                    }}
-                                  />
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                        <div style={{ display: "grid", gap: 8 }}>
-                          {marchSaturdayOptions.map((date) => (
-                            <label key={date} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <input
-                                type="checkbox"
-                                checked={editingVoteDates.includes(date)}
-                                onChange={() => onToggleEditingVoteDate(date)}
-                              />
-                              {date}
-                            </label>
-                          ))}
-                        </div>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <button
-                            type="button"
-                            onClick={() => void onSaveEditVote()}
-                            disabled={isSavingEdit}
-                            style={{
-                              padding: "6px 10px",
-                              borderRadius: 6,
-                              border: "none",
-                              background: isSavingEdit ? "#8aa5d8" : "#1f6feb",
-                              color: "#fff",
-                              cursor: isSavingEdit ? "not-allowed" : "pointer",
-                              fontSize: 12,
-                            }}
-                          >
-                            {isSavingEdit ? "儲存中..." : "儲存修改"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void onDeleteVote(vote.id)}
-                            disabled={deletingVoteId === vote.id}
-                            style={{
-                              padding: "6px 10px",
-                              borderRadius: 6,
-                              border: "none",
-                              background: deletingVoteId === vote.id ? "#d8a1a1" : "#d32f2f",
-                              color: "#fff",
-                              cursor: deletingVoteId === vote.id ? "not-allowed" : "pointer",
-                              fontSize: 12,
-                            }}
-                          >
-                            {deletingVoteId === vote.id ? "刪除中..." : "刪除這筆"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={onCancelEditVote}
-                            style={{
-                              padding: "6px 10px",
-                              borderRadius: 6,
-                              border: "1px solid #ccc",
-                              background: "#fff",
-                              color: "#222",
-                              cursor: "pointer",
-                              fontSize: 12,
-                            }}
-                          >
-                            取消
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
+              {personalVoteSummaries.map((item) => (
+                <li key={item.voterName}>
+                  <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10, background: "#fafafa" }}>
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                      {item.voterName}（共 {item.recordCount} 筆）
+                    </div>
+                    <div>遊戲：{item.games.join("、") || "-"}</div>
+                    <div>日期：{item.dates.join("、") || "-"}</div>
+                    <div>投票時間：{item.times.join("、") || "-"}</div>
+                  </div>
+                </li>
+              ))}
             </ul>
           )}
         </section>
