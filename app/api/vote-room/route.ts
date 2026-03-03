@@ -69,6 +69,12 @@ const formatVoteRoomError = (error: any, fallback: string) => {
   if (message.includes("vote_room_votes") || error?.code === "PGRST205") {
     return "尚未建立 vote_room_votes 資料表，請到 Supabase SQL Editor 依序執行 db/create_vote_room_votes_table.sql 與 db/rls_vote_room_votes.sql。";
   }
+  if (message.includes("invalid input syntax for type numeric") && message.includes("game_price")) {
+    return "目前資料庫的 vote_room_votes.game_price 仍是 numeric，請到 Supabase SQL Editor 執行 db/migrate_vote_room_votes_multi_dates.sql，將 game_price 轉為 TEXT。";
+  }
+  if (message.includes("invalid input syntax for type numeric")) {
+    return "目前資料庫欄位型別仍為 numeric，請到 Supabase SQL Editor 執行 db/migrate_vote_room_votes_multi_dates.sql。";
+  }
   return message || fallback;
 };
 

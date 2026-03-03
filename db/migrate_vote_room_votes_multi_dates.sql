@@ -9,6 +9,10 @@ ALTER TABLE public.vote_room_votes
 ALTER TABLE public.vote_room_votes
   ADD COLUMN IF NOT EXISTS game_price TEXT;
 
+-- 先移除舊的 numeric 檢查，避免轉型成 TEXT 時發生 text >= numeric 錯誤
+ALTER TABLE public.vote_room_votes
+  DROP CONSTRAINT IF EXISTS vote_room_votes_game_price_non_negative;
+
 DO $$
 BEGIN
   IF EXISTS (
@@ -33,6 +37,3 @@ SET vote_days = jsonb_build_array(to_char(vote_day, 'YYYY-MM-DD'))
 WHERE jsonb_typeof(vote_days) = 'array'
   AND jsonb_array_length(vote_days) = 0
   AND vote_day IS NOT NULL;
-
-ALTER TABLE public.vote_room_votes
-  DROP CONSTRAINT IF EXISTS vote_room_votes_game_price_non_negative;

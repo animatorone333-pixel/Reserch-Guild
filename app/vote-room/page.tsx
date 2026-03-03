@@ -166,6 +166,57 @@ export default function VoteRoomPage() {
     return Array.from(stats.entries()).sort((a, b) => b[1] - a[1]);
   }, [votes]);
 
+  const personalVoteSummaries = useMemo(() => {
+    const summaryMap = new Map<
+      string,
+      {
+        games: Set<string>;
+        dates: Set<string>;
+        times: Set<string>;
+      }
+    >();
+
+    votes.forEach((vote) => {
+      const voterKey = vote.voter_name.trim() || "未命名";
+      if (!summaryMap.has(voterKey)) {
+        summaryMap.set(voterKey, {
+          games: new Set<string>(),
+          dates: new Set<string>(),
+          times: new Set<string>(),
+        });
+      }
+
+      const target = summaryMap.get(voterKey)!;
+      if (vote.game_name.trim()) {
+        target.games.add(vote.game_name.trim());
+      }
+
+      parseVoteDates(vote).forEach((date) => target.dates.add(date));
+
+      const createdAt = new Date(vote.created_at);
+      if (!Number.isNaN(createdAt.getTime())) {
+        const timeText = createdAt.toLocaleString("zh-TW", {
+          hour12: false,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        target.times.add(timeText);
+      }
+    });
+
+    return Array.from(summaryMap.entries())
+      .map(([voterName, info]) => ({
+        voterName,
+        games: Array.from(info.games),
+        dates: Array.from(info.dates),
+        times: Array.from(info.times),
+      }))
+      .sort((a, b) => a.voterName.localeCompare(b.voterName, "zh-Hant"));
+  }, [votes]);
+
 
   const onToggleVoteDate = (date: string) => {
     setVoteDates((prev) =>
@@ -858,6 +909,24 @@ export default function VoteRoomPage() {
               {voteStats.map(([name, count]) => (
                 <li key={name}>
                   {name}：{count} 票
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section style={{ marginBottom: 20 }}>
+          <h2 style={{ margin: "0 0 10px" }}>個人投票彙整</h2>
+          {personalVoteSummaries.length === 0 ? (
+            <p style={{ margin: 0, color: "#777" }}>目前還沒有投票彙整</p>
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 8 }}>
+              {personalVoteSummaries.map((item) => (
+                <li key={item.voterName}>
+                  <strong>{item.voterName}</strong>
+                  <div>想玩遊戲：{item.games.join("、") || "-"}</div>
+                  <div>可投票日期：{item.dates.join("、") || "-"}</div>
+                  <div>送出時間：{item.times.join("、") || "-"}</div>
                 </li>
               ))}
             </ul>
