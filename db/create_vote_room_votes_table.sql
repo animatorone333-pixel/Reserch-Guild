@@ -11,6 +11,16 @@ CREATE TABLE IF NOT EXISTS public.vote_room_votes (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 若資料表是舊版本，補齊新欄位（可重複執行）
+ALTER TABLE public.vote_room_votes
+  ADD COLUMN IF NOT EXISTS game_url TEXT;
+
+ALTER TABLE public.vote_room_votes
+  ADD COLUMN IF NOT EXISTS game_price NUMERIC(10,2);
+
+ALTER TABLE public.vote_room_votes
+  ADD COLUMN IF NOT EXISTS vote_days JSONB NOT NULL DEFAULT '[]'::jsonb;
+
 -- 防止同姓名 + 同遊戲在同一天重複投票（忽略大小寫與前後空白）
 CREATE UNIQUE INDEX IF NOT EXISTS vote_room_votes_unique_daily_vote
   ON public.vote_room_votes (

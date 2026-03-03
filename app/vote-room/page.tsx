@@ -15,6 +15,22 @@ interface VoteRecord {
   created_at: string;
 }
 
+interface GameInputRow {
+  id: string;
+  selected: boolean;
+  gameName: string;
+  gameUrl: string;
+  gamePrice: string;
+}
+
+const createEmptyGameRow = (): GameInputRow => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  selected: true,
+  gameName: "",
+  gameUrl: "",
+  gamePrice: "",
+});
+
 const parseVoteDates = (vote: VoteRecord): string[] => {
   if (Array.isArray(vote.vote_days) && vote.vote_days.length > 0) {
     return vote.vote_days
@@ -55,9 +71,7 @@ export default function VoteRoomPage() {
   }, []);
 
   const initialVoteDate = marchSaturdayOptions[0] || "";
-  const [gameName, setGameName] = useState("");
-  const [gameUrl, setGameUrl] = useState("");
-  const [gamePrice, setGamePrice] = useState("");
+  const [gameRows, setGameRows] = useState<GameInputRow[]>([createEmptyGameRow()]);
   const [voterName, setVoterName] = useState("");
   const [voteDates, setVoteDates] = useState<string[]>(initialVoteDate ? [initialVoteDate] : []);
   const [agreeVote, setAgreeVote] = useState(false);
@@ -121,19 +135,83 @@ export default function VoteRoomPage() {
     );
   };
 
+  const onAddGameRow = () => {
+    setGameRows((prev) => [...prev, createEmptyGameRow()]);
+  };
+
+  const onRemoveGameRow = (rowId: string) => {
+    setGameRows((prev) => {
+      if (prev.length <= 1) {
+        return [createEmptyGameRow()];
+      }
+      return prev.filter((row) => row.id !== rowId);
+    });
+  };
+
+  const onChangeGameRow = (rowId: string, field: "gameName" | "gameUrl" | "gamePrice", value: string) => {
+    setGameRows((prev) =>
+      prev.map((row) => (row.id === rowId ? { ...row, [field]: value } : row))
+    );
+  };
+
+  const onToggleGameRowSelected = (rowId: string) => {
+    setGameRows((prev) =>
+      prev.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              selected: !row.selected,
+            }
+          : row
+      )
+    );
+  };
+
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const trimmedGameName = gameName.trim();
-    const trimmedGameUrl = gameUrl.trim();
-    const trimmedGamePrice = gamePrice.trim();
     const trimmedVoterName = voterName.trim();
     const normalizedVoteDates = voteDates
       .map((date) => date.trim())
       .filter((date) => date.length > 0);
 
-    if (!trimmedGameName || !trimmedVoterName) {
-      setError("請填寫遊戲名稱與姓名");
+    const normalizedRows = gameRows.map((row) => ({
+      ...row,
+      gameName: row.gameName.trim(),
+      gameUrl: row.gameUrl.trim(),
+      gamePrice: row.gamePrice.trim(),
+    }));
+
+    const selectedRows = normalizedRows.filter((row) => row.selected);
+    const filledRows = selectedRows.filter(
+      (row) => row.gameName || row.gameUrl || row.gamePrice
+    );
+
+    const submitRows = filledRows.filter((row) => row.gameName);
+
+    if (!trimmedVoterName) {
+      setError("請填寫姓名");
+      return;
+    }
+
+    if (!selectedRows.length) {
+      setError("請至少勾選一個遊戲列");
+      return;
+    }
+
+    if (!filledRows.length) {
+      setError("請至少新增一列遊戲資訊");
+      return;
+    }
+
+    if (!submitRows.length) {
+      setError("請至少填寫一個遊戲名稱");
+      return;
+    }
+
+    const hasPartialRow = filledRows.some((row) => !row.gameName);
+    if (hasPartialRow) {
+      setError("有列資料未填遊戲名稱，請補上或刪除該列");
       return;
     }
 
@@ -148,17 +226,27 @@ export default function VoteRoomPage() {
       return;
     }
 
-    if (trimmedGameUrl) {
+    const invalidUrlRow = submitRows.find((row) => {
+      if (!row.gameUrl) return false;
       try {
-        new URL(trimmedGameUrl);
+        new URL(row.gameUrl);
+        return false;
       } catch {
-        setError("遊戲網址格式不正確");
-        return;
+        return true;
       }
+    });
+    if (invalidUrlRow) {
+      const rowIndex = submitRows.findIndex((row) => row.id === invalidUrlRow.id) + 1;
+      setError(`第 ${rowIndex} 列遊戲網址格式不正確`);
+      return;
     }
 
-    if (trimmedGamePrice && Number.isNaN(Number(trimmedGamePrice))) {
-      setError("價格需為數字");
+    const invalidPriceRow = submitRows.find(
+      (row) => row.gamePrice && Number.isNaN(Number(row.gamePrice))
+    );
+    if (invalidPriceRow) {
+      const rowIndex = submitRows.findIndex((row) => row.id === invalidPriceRow.id) + 1;
+      setError(`第 ${rowIndex} 列價格需為數字`);
       return;
     }
 
@@ -170,27 +258,27 @@ export default function VoteRoomPage() {
     setError("");
     setIsSubmitting(true);
     try {
-      const response = await fetch("/api/vote-room", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          gameName: trimmedGameName,
-          gameUrl: trimmedGameUrl,
-          gamePrice: trimmedGamePrice,
-          voterName: trimmedVoterName,
-          voteDates: normalizedVoteDates,
-          agreeVote,
-        }),
-      });
+      for (const row of submitRows) {
+        const response = await fetch("/api/vote-room", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            gameName: row.gameName,
+            gameUrl: row.gameUrl,
+            gamePrice: row.gamePrice,
+            voterName: trimmedVoterName,
+            voteDates: normalizedVoteDates,
+            agreeVote,
+          }),
+        });
 
-      const result = await response.json();
-      if (!response.ok || !result?.success) {
-        throw new Error(result?.error || "投票失敗");
+        const result = await response.json();
+        if (!response.ok || !result?.success) {
+          throw new Error(result?.error || "投票失敗");
+        }
       }
 
-      setGameName("");
-      setGameUrl("");
-      setGamePrice("");
+      setGameRows([createEmptyGameRow()]);
       setVoterName("");
       setAgreeVote(false);
       setVoteDates(initialVoteDate ? [initialVoteDate] : []);
@@ -216,9 +304,7 @@ export default function VoteRoomPage() {
       }
 
       setVotes([]);
-      setGameName("");
-      setGameUrl("");
-      setGamePrice("");
+      setGameRows([createEmptyGameRow()]);
       setVoterName("");
       setAgreeVote(false);
       setVoteDates(initialVoteDate ? [initialVoteDate] : []);
@@ -422,11 +508,31 @@ export default function VoteRoomPage() {
 
         <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginBottom: 24 }}>
           <div style={{ display: "grid", gap: 6 }}>
-            <span>遊戲資訊（表格）</span>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <span>遊戲資訊（表格）</span>
+              <button
+                type="button"
+                onClick={onAddGameRow}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: "#2f7d32",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontSize: 12,
+                }}
+              >
+                新增一列
+              </button>
+            </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
+                      勾選
+                    </th>
                     <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
                       遊戲名稱
                     </th>
@@ -436,59 +542,88 @@ export default function VoteRoomPage() {
                     <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>
                       價格
                     </th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd", width: 88 }}>
+                      操作
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
-                      <input
-                        type="text"
-                        value={gameName}
-                        onChange={(e) => setGameName(e.target.value)}
-                        placeholder="例如：奪魂鋸密室"
-                        style={{
-                          width: "100%",
-                          padding: "10px 12px",
-                          borderRadius: 8,
-                          border: "1px solid #ccc",
-                          color: "#000",
-                          background: "#fff",
-                        }}
-                      />
-                    </td>
-                    <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
-                      <input
-                        type="url"
-                        value={gameUrl}
-                        onChange={(e) => setGameUrl(e.target.value)}
-                        placeholder="https://..."
-                        style={{
-                          width: "100%",
-                          padding: "10px 12px",
-                          borderRadius: 8,
-                          border: "1px solid #ccc",
-                          color: "#000",
-                          background: "#fff",
-                        }}
-                      />
-                    </td>
-                    <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
-                      <input
-                        type="text"
-                        value={gamePrice}
-                        onChange={(e) => setGamePrice(e.target.value)}
-                        placeholder="例如：800"
-                        style={{
-                          width: "100%",
-                          padding: "10px 12px",
-                          borderRadius: 8,
-                          border: "1px solid #ccc",
-                          color: "#000",
-                          background: "#fff",
-                        }}
-                      />
-                    </td>
-                  </tr>
+                  {gameRows.map((row) => (
+                    <tr key={row.id}>
+                      <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                        <input
+                          type="checkbox"
+                          checked={row.selected}
+                          onChange={() => onToggleGameRowSelected(row.id)}
+                        />
+                      </td>
+                      <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                        <input
+                          type="text"
+                          value={row.gameName}
+                          onChange={(e) => onChangeGameRow(row.id, "gameName", e.target.value)}
+                          placeholder="例如：奪魂鋸密室"
+                          style={{
+                            width: "100%",
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            border: "1px solid #ccc",
+                            color: "#000",
+                            background: "#fff",
+                          }}
+                        />
+                      </td>
+                      <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                        <input
+                          type="url"
+                          value={row.gameUrl}
+                          onChange={(e) => onChangeGameRow(row.id, "gameUrl", e.target.value)}
+                          placeholder="https://..."
+                          style={{
+                            width: "100%",
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            border: "1px solid #ccc",
+                            color: "#000",
+                            background: "#fff",
+                          }}
+                        />
+                      </td>
+                      <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                        <input
+                          type="text"
+                          value={row.gamePrice}
+                          onChange={(e) => onChangeGameRow(row.id, "gamePrice", e.target.value)}
+                          placeholder="例如：800"
+                          style={{
+                            width: "100%",
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            border: "1px solid #ccc",
+                            color: "#000",
+                            background: "#fff",
+                          }}
+                        />
+                      </td>
+                      <td style={{ padding: "8px", borderBottom: "1px solid #eee" }}>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveGameRow(row.id)}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 6,
+                            border: "none",
+                            background: "#d32f2f",
+                            color: "#fff",
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          刪除
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
