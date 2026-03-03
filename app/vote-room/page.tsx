@@ -69,23 +69,25 @@ export default function VoteRoomPage() {
     return `${y}-${m}-${d}`;
   };
 
-  const marchSaturdayOptions = useMemo(() => {
+  const springSaturdayOptions = useMemo(() => {
     const options: string[] = [];
     const year = 2026;
-    const march = 2;
+    const targetMonths = [2, 3];
 
-    for (let day = 1; day <= 31; day++) {
-      const date = new Date(year, march, day);
-      if (date.getMonth() !== march) break;
-      if (date.getDay() === 6) {
-        options.push(toLocalDateString(date));
+    targetMonths.forEach((monthIndex) => {
+      for (let day = 1; day <= 31; day++) {
+        const date = new Date(year, monthIndex, day);
+        if (date.getMonth() !== monthIndex) break;
+        if (date.getDay() === 6) {
+          options.push(toLocalDateString(date));
+        }
       }
-    }
+    });
 
     return options;
   }, []);
 
-  const initialVoteDate = marchSaturdayOptions[0] || "";
+  const initialVoteDate = springSaturdayOptions[0] || "";
   const [gameRows, setGameRows] = useState<GameInputRow[]>([createEmptyGameRow()]);
   const [currentVoteGames, setCurrentVoteGames] = useState<VoteGameOption[]>([]);
   const [selectedGameIds, setSelectedGameIds] = useState<string[]>([]);
@@ -419,9 +421,9 @@ export default function VoteRoomPage() {
       return;
     }
 
-    const hasInvalidDate = normalizedVoteDates.some((date) => !marchSaturdayOptions.includes(date));
+    const hasInvalidDate = normalizedVoteDates.some((date) => !springSaturdayOptions.includes(date));
     if (hasInvalidDate) {
-      setError("投票日期僅能選擇 2026 年 3 月的星期六");
+      setError("投票日期僅能選擇 2026 年 3 月與 4 月的星期六");
       return;
     }
 
@@ -563,8 +565,8 @@ export default function VoteRoomPage() {
       return;
     }
 
-    if (normalizedVoteDates.some((date) => !marchSaturdayOptions.includes(date))) {
-      setError("投票日期僅能選擇 2026 年 3 月的星期六");
+    if (normalizedVoteDates.some((date) => !springSaturdayOptions.includes(date))) {
+      setError("投票日期僅能選擇 2026 年 3 月與 4 月的星期六");
       return;
     }
 
@@ -705,7 +707,7 @@ export default function VoteRoomPage() {
         <section style={{ marginBottom: 24 }}>
           <h2 style={{ margin: "0 0 10px" }}>投票日期（可複選）</h2>
           <div style={{ display: "grid", gap: 8 }}>
-            {marchSaturdayOptions.map((date) => (
+            {springSaturdayOptions.map((date) => (
               <label key={date} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <input
                   type="checkbox"
@@ -1042,7 +1044,7 @@ export default function VoteRoomPage() {
                         </div>
                         <div style={{ display: "grid", gap: 8 }}>
                           <div>日期（可複選）</div>
-                          {marchSaturdayOptions.map((date) => (
+                          {springSaturdayOptions.map((date) => (
                             <label key={date} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                               <input
                                 type="checkbox"
