@@ -742,7 +742,7 @@ export default function VoteRoomPage() {
                     fontSize: 12,
                   }}
                 >
-                  新增一列
+                  新增
                 </button>
                 <button
                   type="button"
@@ -757,7 +757,7 @@ export default function VoteRoomPage() {
                     fontSize: 12,
                   }}
                 >
-                  儲存本次遊戲清單
+                  儲存
                 </button>
               </div>
             </div>
