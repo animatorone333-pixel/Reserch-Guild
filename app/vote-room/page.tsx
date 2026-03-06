@@ -73,13 +73,17 @@ export default function VoteRoomPage() {
     const options: string[] = [];
     const year = 2026;
     const targetMonths = [2, 3];
+    const excludedDates = ["2026-03-07"]; // 排除的日期
 
     targetMonths.forEach((monthIndex) => {
       for (let day = 1; day <= 31; day++) {
         const date = new Date(year, monthIndex, day);
         if (date.getMonth() !== monthIndex) break;
         if (date.getDay() === 6) {
-          options.push(toLocalDateString(date));
+          const dateString = toLocalDateString(date);
+          if (!excludedDates.includes(dateString)) {
+            options.push(dateString);
+          }
         }
       }
     });
