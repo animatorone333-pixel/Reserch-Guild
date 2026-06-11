@@ -1118,7 +1118,7 @@ export default function VoteRoomPage() {
                       checked={selectedGameIds.includes(ALL_GAMES_OPTION_ID)}
                       onChange={() => onToggleVoteGame(ALL_GAMES_OPTION_ID)}
                     />
-                    <span>以上皆可</span>
+                    <span>以下皆可</span>
                   </label>
                 </li>
                 {currentVoteGames.map((option) => (
