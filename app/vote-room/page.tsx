@@ -70,6 +70,7 @@ export default function VoteRoomPage() {
   };
 
   const defaultVoteDates = useMemo(() => ["2026-06-20", "2026-06-21", "2026-06-28"], []);
+  const voteDateStorageKey = "vote-room-date-options-v1";
   const [voteDateOptions, setVoteDateOptions] = useState<string[]>(defaultVoteDates);
   const [newVoteDate, setNewVoteDate] = useState("");
   const [gameRows, setGameRows] = useState<GameInputRow[]>([createEmptyGameRow()]);
@@ -144,6 +145,28 @@ export default function VoteRoomPage() {
     }
   };
 
+  const loadVoteDateOptionsFromLocal = (): string[] => {
+    try {
+      const stored = window.localStorage.getItem(voteDateStorageKey);
+      if (!stored) return [];
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
+        return parsed.filter((item) => item.trim().length > 0);
+      }
+    } catch {
+      // ignore invalid storage contents
+    }
+    return [];
+  };
+
+  const saveVoteDateOptionsToLocal = (dates: string[]) => {
+    try {
+      window.localStorage.setItem(voteDateStorageKey, JSON.stringify(dates));
+    } catch {
+      // ignore local storage failures
+    }
+  };
+
   const loadVoteDateOptions = async () => {
     try {
       const response = await fetch("/api/vote-room-dates", { cache: "no-store" });
@@ -158,11 +181,20 @@ export default function VoteRoomPage() {
           setVoteDateOptions(dates);
           setVoteDates([dates[0]]);
           setEditingVoteDates([dates[0]]);
+          saveVoteDateOptionsToLocal(dates);
           return;
         }
       }
     } catch {
-      // fallback to default dates below
+      // backend unavailable
+    }
+
+    const localDates = loadVoteDateOptionsFromLocal();
+    if (localDates.length) {
+      setVoteDateOptions(localDates);
+      setVoteDates([localDates[0]]);
+      setEditingVoteDates([localDates[0]]);
+      return;
     }
 
     setVoteDateOptions(defaultVoteDates);
@@ -298,7 +330,11 @@ export default function VoteRoomPage() {
       setNewVoteDate("");
       setError("");
     } catch (e: any) {
-      setError(e?.message || "新增日期失敗");
+      const nextDates = [...voteDateOptions, trimmed];
+      setVoteDateOptions(nextDates);
+      saveVoteDateOptionsToLocal(nextDates);
+      setNewVoteDate("");
+      setError(e?.message || "新增日期失敗，已保存在本地瀏覽器");
     }
   };
 
@@ -325,7 +361,10 @@ export default function VoteRoomPage() {
       setError("");
       setTimeout(() => setSuccessMessage(""), 2500);
     } catch (e: any) {
-      setError(e?.message || "儲存日期失敗");
+      saveVoteDateOptionsToLocal(voteDateOptions);
+      setSuccessMessage(`已儲存日期選項至本地（共 ${voteDateOptions.length} 個）`);
+      setError(e?.message || "後端無法儲存，已保存在本地瀏覽器");
+      setTimeout(() => setSuccessMessage(""), 2500);
     } finally {
       setIsSavingVoteDateOptions(false);
     }
@@ -347,11 +386,18 @@ export default function VoteRoomPage() {
       setVoteDateOptions(defaultVoteDates);
       setVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
       setEditingVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
+      saveVoteDateOptionsToLocal(defaultVoteDates);
       setSuccessMessage("已重設為預設日期");
       setError("");
       setTimeout(() => setSuccessMessage(""), 2500);
     } catch (e: any) {
-      setError(e?.message || "重設日期失敗");
+      setVoteDateOptions(defaultVoteDates);
+      setVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
+      setEditingVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
+      saveVoteDateOptionsToLocal(defaultVoteDates);
+      setSuccessMessage("已重設為本地預設日期");
+      setError(e?.message || "後端無法重設，已保存在本地瀏覽器");
+      setTimeout(() => setSuccessMessage(""), 2500);
     } finally {
       setIsSavingVoteDateOptions(false);
     }
@@ -376,9 +422,19 @@ export default function VoteRoomPage() {
       setVoteDateOptions(nextDates);
       setVoteDates((prev) => prev.filter((item) => nextDates.includes(item)));
       setEditingVoteDates((prev) => prev.filter((item) => nextDates.includes(item)));
+      saveVoteDateOptionsToLocal(nextDates);
       setError("");
     } catch (e: any) {
-      setError(e?.message || "刪除日期失敗");
+      const nextDates = voteDateOptions.filter((item) => item !== date);
+      if (!nextDates.length) {
+        await onResetVoteDateOptions();
+        return;
+      }
+      setVoteDateOptions(nextDates);
+      setVoteDates((prev) => prev.filter((item) => nextDates.includes(item)));
+      setEditingVoteDates((prev) => prev.filter((item) => nextDates.includes(item)));
+      saveVoteDateOptionsToLocal(nextDates);
+      setError(e?.message || "後端無法刪除，已在本地移除此日期");
     }
   };
 
