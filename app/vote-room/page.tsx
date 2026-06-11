@@ -38,6 +38,7 @@ interface VoterSummary {
 }
 
 const ALL_GAMES_OPTION_ID = "__ALL_GAMES__";
+const ALL_DATES_OPTION = "以上皆可";
 
 const createEmptyGameRow = (): GameInputRow => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -285,14 +286,36 @@ export default function VoteRoomPage() {
 
 
   const onToggleVoteDate = (date: string) => {
+    if (date === ALL_DATES_OPTION) {
+      setVoteDates((prev) =>
+        prev.includes(ALL_DATES_OPTION)
+          ? prev.filter((item) => item !== ALL_DATES_OPTION)
+          : [...prev.filter((item) => item !== ALL_DATES_OPTION), ALL_DATES_OPTION]
+      );
+      return;
+    }
+
     setVoteDates((prev) =>
-      prev.includes(date) ? prev.filter((item) => item !== date) : [...prev, date]
+      prev.includes(date)
+        ? prev.filter((item) => item !== date)
+        : [...prev.filter((item) => item !== ALL_DATES_OPTION), date]
     );
   };
 
   const onToggleEditingVoteDate = (date: string) => {
+    if (date === ALL_DATES_OPTION) {
+      setEditingVoteDates((prev) =>
+        prev.includes(ALL_DATES_OPTION)
+          ? prev.filter((item) => item !== ALL_DATES_OPTION)
+          : [...prev.filter((item) => item !== ALL_DATES_OPTION), ALL_DATES_OPTION]
+      );
+      return;
+    }
+
     setEditingVoteDates((prev) =>
-      prev.includes(date) ? prev.filter((item) => item !== date) : [...prev, date]
+      prev.includes(date)
+        ? prev.filter((item) => item !== date)
+        : [...prev.filter((item) => item !== ALL_DATES_OPTION), date]
     );
   };
 
@@ -549,7 +572,7 @@ export default function VoteRoomPage() {
     setSuccessMessage("");
 
     const trimmedVoterName = voterName.trim();
-    const normalizedVoteDates = voteDates
+    let normalizedVoteDates = voteDates
       .map((date) => date.trim())
       .filter((date) => date.length > 0);
 
@@ -573,9 +596,14 @@ export default function VoteRoomPage() {
       return;
     }
 
+    // 如果選擇了"以上皆可"，展開為所有可用日期
+    if (normalizedVoteDates.includes(ALL_DATES_OPTION)) {
+      normalizedVoteDates = voteDateOptions.filter((date) => date !== ALL_DATES_OPTION);
+    }
+
     const hasInvalidDate = normalizedVoteDates.some((date) => !voteDateOptions.includes(date));
     if (hasInvalidDate) {
-      setError(`投票日期僅能選擇以下日期：${voteDateOptions.join("、")}`);
+      setError(`投票日期僅能選擇以下日期：${voteDateOptions.filter((d) => d !== ALL_DATES_OPTION).join("、")}`);
       return;
     }
 
@@ -699,7 +727,7 @@ export default function VoteRoomPage() {
     const targetVoterName = editingVoterName?.trim() || "";
     if (!targetVoterName) return;
 
-    const normalizedVoteDates = editingVoteDates
+    let normalizedVoteDates = editingVoteDates
       .map((date) => date.trim())
       .filter((date) => date.length > 0);
 
@@ -717,8 +745,13 @@ export default function VoteRoomPage() {
       return;
     }
 
+    // 如果選擇了"以上皆可"，展開為所有可用日期
+    if (normalizedVoteDates.includes(ALL_DATES_OPTION)) {
+      normalizedVoteDates = voteDateOptions.filter((date) => date !== ALL_DATES_OPTION);
+    }
+
     if (normalizedVoteDates.some((date) => !voteDateOptions.includes(date))) {
-      setError(`投票日期僅能選擇以下日期：${voteDateOptions.join("、")}`);
+      setError(`投票日期僅能選擇以下日期：${voteDateOptions.filter((d) => d !== ALL_DATES_OPTION).join("、")}`);
       return;
     }
 
@@ -904,6 +937,14 @@ export default function VoteRoomPage() {
               </button>
             </div>
             <div style={{ display: "grid", gap: 8 }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={voteDates.includes(ALL_DATES_OPTION)}
+                  onChange={() => onToggleVoteDate(ALL_DATES_OPTION)}
+                />
+                <span style={{ fontWeight: 600, color: "#1976d2" }}>{ALL_DATES_OPTION}</span>
+              </label>
               {voteDateOptions.map((date) => (
                 <label key={date} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input
@@ -1243,6 +1284,14 @@ export default function VoteRoomPage() {
                         </div>
                         <div style={{ display: "grid", gap: 8 }}>
                           <div>日期（可複選）</div>
+                          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <input
+                              type="checkbox"
+                              checked={editingVoteDates.includes(ALL_DATES_OPTION)}
+                              onChange={() => onToggleEditingVoteDate(ALL_DATES_OPTION)}
+                            />
+                            <span style={{ fontWeight: 600, color: "#1976d2" }}>{ALL_DATES_OPTION}</span>
+                          </label>
                           {voteDateOptions.map((date) => (
                             <label key={date} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                               <input
