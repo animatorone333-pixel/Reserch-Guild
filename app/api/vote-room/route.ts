@@ -15,10 +15,32 @@ interface ExistingVoteRecord {
   vote_days?: string[] | null;
 }
 
+const DEFAULT_ALLOWED_VOTE_ROOM_DATES = ["2026-06-20", "2026-06-21", "2026-06-28"];
 const isValidDateString = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
-const isAllowedVoteRoomDate = (value: string) => {
-  return isValidDateString(value);
+const fetchAllowedVoteRoomDates = async (): Promise<Set<string>> => {
+  if (!supabase) {
+    return new Set(DEFAULT_ALLOWED_VOTE_ROOM_DATES);
+  }
+
+  const { data, error } = await supabase
+    .from("vote_room_date_options")
+    .select("vote_date");
+
+  if (error || !Array.isArray(data) || data.length === 0) {
+    return new Set(DEFAULT_ALLOWED_VOTE_ROOM_DATES);
+  }
+
+  return new Set(
+    data
+      .map((item: any) => {
+        if (typeof item?.vote_date === "string") return item.vote_date;
+        if (item?.vote_date?.toString) return String(item.vote_date);
+        return "";
+      })
+      .map((date: string) => date.trim())
+      .filter((date: string) => date.length > 0)
+  );
 };
 
 const parseVoteDatesPayload = (value: unknown): string[] => {
@@ -158,9 +180,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (voteDates.some((date) => !isAllowedVoteRoomDate(date))) {
+    const allowedVoteDates = await fetchAllowedVoteRoomDates();
+    if (voteDates.some((date) => !allowedVoteDates.has(date))) {
       return NextResponse.json(
-        { success: false, error: "voteDates 僅允許 2026-06-20、2026-06-21 或 2026-06-28" },
+        { success: false, error: `voteDates 僅允許以下日期：${Array.from(allowedVoteDates).join("、")}` },
         { status: 400 }
       );
     }
@@ -325,9 +348,10 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (voteDates.some((date) => !isAllowedVoteRoomDate(date))) {
+    const allowedVoteDates = await fetchAllowedVoteRoomDates();
+    if (voteDates.some((date) => !allowedVoteDates.has(date))) {
       return NextResponse.json(
-        { success: false, error: "投票日期僅允許 2026-06-20、2026-06-21 或 2026-06-28" },
+        { success: false, error: `voteDates 僅允許以下日期：${Array.from(allowedVoteDates).join("、")}` },
         { status: 400 }
       );
     }

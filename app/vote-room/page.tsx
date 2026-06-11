@@ -70,7 +70,6 @@ export default function VoteRoomPage() {
   };
 
   const defaultVoteDates = useMemo(() => ["2026-06-20", "2026-06-21", "2026-06-28"], []);
-  const voteDateStorageKey = "vote-room-date-options-v1";
   const [voteDateOptions, setVoteDateOptions] = useState<string[]>(defaultVoteDates);
   const [newVoteDate, setNewVoteDate] = useState("");
   const [gameRows, setGameRows] = useState<GameInputRow[]>([createEmptyGameRow()]);
@@ -85,6 +84,7 @@ export default function VoteRoomPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingVoteDateOptions, setIsSavingVoteDateOptions] = useState(false);
   const [editingVoterName, setEditingVoterName] = useState<string | null>(null);
   const [editingSelectedGames, setEditingSelectedGames] = useState<string[]>([]);
   const [editingVoteDates, setEditingVoteDates] = useState<string[]>([]);
@@ -144,25 +144,34 @@ export default function VoteRoomPage() {
     }
   };
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem(voteDateStorageKey);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
-          const options = parsed.length ? parsed : defaultVoteDates;
-          setVoteDateOptions(options);
-          setVoteDates(options.length ? [options[0]] : []);
-          setEditingVoteDates(options.length ? [options[0]] : []);
+  const loadVoteDateOptions = async () => {
+    try {
+      const response = await fetch("/api/vote-room-dates", { cache: "no-store" });
+      const result = await response.json();
+
+      if (response.ok && result?.success && Array.isArray(result.data) && result.data.length) {
+        const dates = result.data
+          .map((item: any) => (typeof item?.vote_date === "string" ? item.vote_date.trim() : ""))
+          .filter((date: string) => date.length > 0);
+
+        if (dates.length) {
+          setVoteDateOptions(dates);
+          setVoteDates([dates[0]]);
+          setEditingVoteDates([dates[0]]);
           return;
         }
-      } catch {
-        // ignore invalid storage contents
       }
+    } catch {
+      // fallback to default dates below
     }
+
     setVoteDateOptions(defaultVoteDates);
     setVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
     setEditingVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
+  };
+
+  useEffect(() => {
+    void loadVoteDateOptions();
   }, [defaultVoteDates]);
 
   useEffect(() => {
@@ -256,7 +265,7 @@ export default function VoteRoomPage() {
     );
   };
 
-  const onAddVoteDateOption = () => {
+  const onAddVoteDateOption = async () => {
     const trimmed = newVoteDate.trim();
     if (!trimmed) {
       setError("請輸入要新增的日期");
@@ -274,48 +283,102 @@ export default function VoteRoomPage() {
       return;
     }
 
-    const nextDates = [...voteDateOptions, trimmed];
-    setVoteDateOptions(nextDates);
-    setNewVoteDate("");
-    setError("");
-    window.localStorage.setItem(voteDateStorageKey, JSON.stringify(nextDates));
+    try {
+      const response = await fetch("/api/vote-room-dates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voteDates: [trimmed] }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || "新增日期失敗");
+      }
+
+      await loadVoteDateOptions();
+      setNewVoteDate("");
+      setError("");
+    } catch (e: any) {
+      setError(e?.message || "新增日期失敗");
+    }
   };
 
-  const onSaveVoteDateOptions = () => {
+  const onSaveVoteDateOptions = async () => {
+    if (!voteDateOptions.length) {
+      setError("目前沒有可儲存的日期");
+      return;
+    }
+
+    setIsSavingVoteDateOptions(true);
     try {
-      window.localStorage.setItem(voteDateStorageKey, JSON.stringify(voteDateOptions));
+      const response = await fetch("/api/vote-room-dates", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voteDates: voteDateOptions }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || "儲存日期失敗");
+      }
+
+      await loadVoteDateOptions();
       setSuccessMessage(`已儲存日期選項（共 ${voteDateOptions.length} 個）`);
       setError("");
       setTimeout(() => setSuccessMessage(""), 2500);
     } catch (e: any) {
-      setError("儲存失敗");
+      setError(e?.message || "儲存日期失敗");
+    } finally {
+      setIsSavingVoteDateOptions(false);
     }
   };
 
-  const onResetVoteDateOptions = () => {
-    setVoteDateOptions(defaultVoteDates);
-    setVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
-    setEditingVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
+  const onResetVoteDateOptions = async () => {
+    setIsSavingVoteDateOptions(true);
     try {
-      window.localStorage.setItem(voteDateStorageKey, JSON.stringify(defaultVoteDates));
+      const response = await fetch("/api/vote-room-dates", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voteDates: defaultVoteDates }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || "重設日期失敗");
+      }
+
+      setVoteDateOptions(defaultVoteDates);
+      setVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
+      setEditingVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
       setSuccessMessage("已重設為預設日期");
       setError("");
       setTimeout(() => setSuccessMessage(""), 2500);
-    } catch {
-      setError("重設失敗");
+    } catch (e: any) {
+      setError(e?.message || "重設日期失敗");
+    } finally {
+      setIsSavingVoteDateOptions(false);
     }
   };
 
-  const onRemoveVoteDateOption = (date: string) => {
+  const onRemoveVoteDateOption = async (date: string) => {
     const nextDates = voteDateOptions.filter((item) => item !== date);
-    setVoteDateOptions(nextDates.length ? nextDates : defaultVoteDates);
-    if (!nextDates.length) {
-      setVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
-      window.localStorage.removeItem(voteDateStorageKey);
-    } else {
-      window.localStorage.setItem(voteDateStorageKey, JSON.stringify(nextDates));
+    try {
+      const response = await fetch(`/api/vote-room-dates?date=${encodeURIComponent(date)}`, {
+        method: "DELETE",
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || "刪除日期失敗");
+      }
+
+      if (!nextDates.length) {
+        await onResetVoteDateOptions();
+        return;
+      }
+
+      setVoteDateOptions(nextDates);
       setVoteDates((prev) => prev.filter((item) => nextDates.includes(item)));
       setEditingVoteDates((prev) => prev.filter((item) => nextDates.includes(item)));
+      setError("");
+    } catch (e: any) {
+      setError(e?.message || "刪除日期失敗");
     }
   };
 
