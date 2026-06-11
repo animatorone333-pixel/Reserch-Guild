@@ -38,7 +38,7 @@ interface VoterSummary {
 }
 
 const ALL_GAMES_OPTION_ID = "__ALL_GAMES__";
-const ALL_DATES_OPTION = "以上皆可";
+const ALL_DATES_OPTION = "以下皆可";
 
 const createEmptyGameRow = (): GameInputRow => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -213,7 +213,7 @@ export default function VoteRoomPage() {
 
   const voteStats = useMemo(() => {
     const stats = new Map<string, number>();
-    stats.set("以上皆可", 0);
+    stats.set("以下皆可", 0);
 
     votes.forEach((vote) => {
       const key = vote.game_name.trim();
@@ -280,8 +280,8 @@ export default function VoteRoomPage() {
     const fromCurrent = currentVoteGames.map((game) => game.gameName.trim());
     const fromVotes = votes.map((vote) => vote.game_name.trim());
     const names = Array.from(new Set([...fromCurrent, ...fromVotes].filter((name) => name.length > 0)));
-    const withoutAll = names.filter((name) => name !== "以上皆可");
-    return ["以上皆可", ...withoutAll];
+    const withoutAll = names.filter((name) => name !== "以下皆可");
+    return ["以下皆可", ...withoutAll];
   }, [currentVoteGames, votes]);
 
 
@@ -596,7 +596,7 @@ export default function VoteRoomPage() {
       return;
     }
 
-    // 如果選擇了"以上皆可"，展開為所有可用日期
+    // 如果選擇了"以下皆可"，展開為所有可用日期
     if (normalizedVoteDates.includes(ALL_DATES_OPTION)) {
       normalizedVoteDates = voteDateOptions.filter((date) => date !== ALL_DATES_OPTION);
     }
@@ -617,7 +617,7 @@ export default function VoteRoomPage() {
       submitRows = [
         {
           id: ALL_GAMES_OPTION_ID,
-          gameName: "以上皆可",
+          gameName: "以下皆可",
           gameUrl: "",
           gamePrice: "",
         },
@@ -711,15 +711,15 @@ export default function VoteRoomPage() {
   };
 
   const onToggleEditingGame = (gameName: string) => {
-    if (gameName === "以上皆可") {
-      setEditingSelectedGames((prev) => (prev.includes("以上皆可") ? [] : ["以上皆可"]));
+    if (gameName === "以下皆可") {
+      setEditingSelectedGames((prev) => (prev.includes("以下皆可") ? [] : ["以下皆可"]));
       return;
     }
 
     setEditingSelectedGames((prev) =>
       prev.includes(gameName)
         ? prev.filter((item) => item !== gameName)
-        : [...prev.filter((item) => item !== "以上皆可"), gameName]
+        : [...prev.filter((item) => item !== "以下皆可"), gameName]
     );
   };
 
@@ -731,8 +731,8 @@ export default function VoteRoomPage() {
       .map((date) => date.trim())
       .filter((date) => date.length > 0);
 
-    const selectedGamesToSave = editingSelectedGames.includes("以上皆可")
-      ? ["以上皆可"]
+    const selectedGamesToSave = editingSelectedGames.includes("以下皆可")
+      ? ["以下皆可"]
       : editingSelectedGames;
 
     if (!selectedGamesToSave.length) {
@@ -745,7 +745,7 @@ export default function VoteRoomPage() {
       return;
     }
 
-    // 如果選擇了"以上皆可"，展開為所有可用日期
+    // 如果選擇了"以下皆可"，展開為所有可用日期
     if (normalizedVoteDates.includes(ALL_DATES_OPTION)) {
       normalizedVoteDates = voteDateOptions.filter((date) => date !== ALL_DATES_OPTION);
     }
