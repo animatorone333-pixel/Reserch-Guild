@@ -85,7 +85,6 @@ export default function VoteRoomPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSavingVoteDateOptions, setIsSavingVoteDateOptions] = useState(false);
   const [editingVoterName, setEditingVoterName] = useState<string | null>(null);
   const [editingSelectedGames, setEditingSelectedGames] = useState<string[]>([]);
   const [editingVoteDates, setEditingVoteDates] = useState<string[]>([]);
@@ -338,40 +337,7 @@ export default function VoteRoomPage() {
     }
   };
 
-  const onSaveVoteDateOptions = async () => {
-    if (!voteDateOptions.length) {
-      setError("目前沒有可儲存的日期");
-      return;
-    }
-
-    setIsSavingVoteDateOptions(true);
-    try {
-      const response = await fetch("/api/vote-room-dates", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voteDates: voteDateOptions }),
-      });
-      const result = await response.json();
-      if (!response.ok || !result?.success) {
-        throw new Error(result?.error || "儲存日期失敗");
-      }
-
-      await loadVoteDateOptions();
-      setSuccessMessage(`已儲存日期選項（共 ${voteDateOptions.length} 個）`);
-      setError("");
-      setTimeout(() => setSuccessMessage(""), 2500);
-    } catch (e: any) {
-      saveVoteDateOptionsToLocal(voteDateOptions);
-      setSuccessMessage(`已儲存日期選項至本地（共 ${voteDateOptions.length} 個）`);
-      setError(e?.message || "後端無法儲存，已保存在本地瀏覽器");
-      setTimeout(() => setSuccessMessage(""), 2500);
-    } finally {
-      setIsSavingVoteDateOptions(false);
-    }
-  };
-
   const onResetVoteDateOptions = async () => {
-    setIsSavingVoteDateOptions(true);
     try {
       const response = await fetch("/api/vote-room-dates", {
         method: "PUT",
@@ -398,8 +364,6 @@ export default function VoteRoomPage() {
       setSuccessMessage("已重設為本地預設日期");
       setError(e?.message || "後端無法重設，已保存在本地瀏覽器");
       setTimeout(() => setSuccessMessage(""), 2500);
-    } finally {
-      setIsSavingVoteDateOptions(false);
     }
   };
 
@@ -922,21 +886,6 @@ export default function VoteRoomPage() {
                 }}
               >
                 新增日期
-              </button>
-              <button
-                type="button"
-                onClick={onSaveVoteDateOptions}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "#2e7d32",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                }}
-              >
-                儲存日期
               </button>
               <button
                 type="button"

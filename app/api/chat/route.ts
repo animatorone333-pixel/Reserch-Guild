@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
-import path from "path";
+import * as os from "os";
+import * as path from "path";
 
-const DATA_FILE = path.join(process.cwd(), "data", "chat-messages.json");
+const LOCAL_DATA_FILE = path.join(process.cwd(), "data", "chat-messages.json");
+const TMP_DATA_FILE = path.join(os.tmpdir(), "chat-messages.json");
+let activeChatDataFile = LOCAL_DATA_FILE;
+
+const isReadOnlyFsError = (error: any) =>
+  ["EROFS", "EPERM", "EACCES"].includes(error?.code);
+
+const getChatDataFileCandidates = () =>
+  activeChatDataFile === LOCAL_DATA_FILE
+    ? [LOCAL_DATA_FILE, TMP_DATA_FILE]
+    : [TMP_DATA_FILE, LOCAL_DATA_FILE];
 
 interface ChatMessage {
   text: string;
@@ -12,23 +23,41 @@ interface ChatMessage {
 }
 
 async function loadMessages(): Promise<ChatMessage[]> {
-  try {
-    const raw = await fs.readFile(DATA_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed;
-    return [];
-  } catch (e: any) {
-    if (e && e.code === "ENOENT") return [];
-    console.error("讀取聊天室訊息檔案失敗", e);
-    return [];
+  for (const filePath of getChatDataFileCandidates()) {
+    try {
+      const raw = await fs.readFile(filePath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+      return [];
+    } catch (e: any) {
+      if (e && e.code === "ENOENT") continue;
+      if (isReadOnlyFsError(e)) continue;
+      console.error("讀取聊天室訊息檔案失敗", e);
+      return [];
+    }
   }
+  return [];
 }
 
 async function saveMessages(messages: ChatMessage[]) {
-  const dir = path.dirname(DATA_FILE);
-  await fs.mkdir(dir, { recursive: true });
-  const limited = messages.slice(-200); // 最多保留最近 200 則
-  await fs.writeFile(DATA_FILE, JSON.stringify(limited, null, 2), "utf8");
+  const writeToFile = async (filePath: string) => {
+    const dir = path.dirname(filePath);
+    await fs.mkdir(dir, { recursive: true });
+    const limited = messages.slice(-200); // 最多保留最近 200 則
+    await fs.writeFile(filePath, JSON.stringify(limited, null, 2), "utf8");
+  };
+
+  try {
+    await writeToFile(activeChatDataFile);
+    return;
+  } catch (e: any) {
+    if (!isReadOnlyFsError(e) || activeChatDataFile === TMP_DATA_FILE) {
+      throw e;
+    }
+  }
+
+  activeChatDataFile = TMP_DATA_FILE;
+  await writeToFile(activeChatDataFile);
 }
 
 export async function GET(_req: NextRequest) {

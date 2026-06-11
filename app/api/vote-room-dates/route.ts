@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { promises as fs } from "fs";
-import path from "path";
+import * as os from "os";
+import * as path from "path";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -11,7 +12,17 @@ const supabase = hasSupabase
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 
-const DATA_FILE = path.join(process.cwd(), "data", "vote-room-date-options.json");
+const LOCAL_DATA_FILE = path.join(process.cwd(), "data", "vote-room-date-options.json");
+const TMP_DATA_FILE = path.join(os.tmpdir(), "vote-room-date-options.json");
+let activeLocalDataFile = LOCAL_DATA_FILE;
+
+const isReadOnlyFsError = (error: any) =>
+  ["EROFS", "EPERM", "EACCES"].includes(error?.code);
+
+const getLocalDataFileCandidates = () =>
+  activeLocalDataFile === LOCAL_DATA_FILE
+    ? [LOCAL_DATA_FILE, TMP_DATA_FILE]
+    : [TMP_DATA_FILE, LOCAL_DATA_FILE];
 
 const formatError = (error: any, fallback: string) => {
   const message = String(error?.message || "");
@@ -32,24 +43,42 @@ const shouldFallbackToLocal = (error: any) => {
 };
 
 const loadLocalVoteDateOptions = async (): Promise<Array<{ id: number; vote_date: string }>> => {
-  try {
-    const raw = await fs.readFile(DATA_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item) => item && typeof item.id === "number" && typeof item.vote_date === "string")
-      .map((item) => ({ id: item.id, vote_date: item.vote_date.trim() }))
-      .filter((item) => item.vote_date.length > 0);
-  } catch (error: any) {
-    if (error?.code === "ENOENT") return [];
-    console.error("讀取本地投票日期選項失敗", error);
-    return [];
+  for (const filePath of getLocalDataFileCandidates()) {
+    try {
+      const raw = await fs.readFile(filePath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) continue;
+      return parsed
+        .filter((item) => item && typeof item.id === "number" && typeof item.vote_date === "string")
+        .map((item) => ({ id: item.id, vote_date: item.vote_date.trim() }))
+        .filter((item) => item.vote_date.length > 0);
+    } catch (error: any) {
+      if (error?.code === "ENOENT") continue;
+      if (isReadOnlyFsError(error)) continue;
+      console.error("讀取本地投票日期選項失敗", error);
+      return [];
+    }
   }
+  return [];
 };
 
 const saveLocalVoteDateOptions = async (entries: Array<{ id: number; vote_date: string }>) => {
-  await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-  await fs.writeFile(DATA_FILE, JSON.stringify(entries, null, 2), "utf8");
+  const writeToFile = async (filePath: string) => {
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(entries, null, 2), "utf8");
+  };
+
+  try {
+    await writeToFile(activeLocalDataFile);
+    return;
+  } catch (error: any) {
+    if (!isReadOnlyFsError(error) || activeLocalDataFile === TMP_DATA_FILE) {
+      throw error;
+    }
+  }
+
+  activeLocalDataFile = TMP_DATA_FILE;
+  await writeToFile(activeLocalDataFile);
 };
 
 const parseDatePayload = (value: unknown): string[] => {
