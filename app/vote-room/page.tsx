@@ -70,25 +70,8 @@ export default function VoteRoomPage() {
   };
 
   const springSaturdayOptions = useMemo(() => {
-    const options: string[] = [];
-    const year = 2026;
-    const targetMonths = [2, 3];
-    const excludedDates = ["2026-03-07"]; // 排除的日期
-
-    targetMonths.forEach((monthIndex) => {
-      for (let day = 1; day <= 31; day++) {
-        const date = new Date(year, monthIndex, day);
-        if (date.getMonth() !== monthIndex) break;
-        if (date.getDay() === 6) {
-          const dateString = toLocalDateString(date);
-          if (!excludedDates.includes(dateString)) {
-            options.push(dateString);
-          }
-        }
-      }
-    });
-
-    return options;
+    // 明確指定要顯示的投票日期（YYYY-MM-DD）
+    return ["2026-06-20", "2026-06-21", "2026-06-28"];
   }, []);
 
   const initialVoteDate = springSaturdayOptions[0] || "";
@@ -427,7 +410,7 @@ export default function VoteRoomPage() {
 
     const hasInvalidDate = normalizedVoteDates.some((date) => !springSaturdayOptions.includes(date));
     if (hasInvalidDate) {
-      setError("投票日期僅能選擇 2026 年 3 月與 4 月的星期六");
+      setError("投票日期僅能選擇 2026-06-20、2026-06-21 或 2026-06-28");
       return;
     }
 
@@ -570,7 +553,7 @@ export default function VoteRoomPage() {
     }
 
     if (normalizedVoteDates.some((date) => !springSaturdayOptions.includes(date))) {
-      setError("投票日期僅能選擇 2026 年 3 月與 4 月的星期六");
+      setError("投票日期僅能選擇 2026-06-20、2026-06-21 或 2026-06-28");
       return;
     }
 
