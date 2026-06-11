@@ -69,17 +69,15 @@ export default function VoteRoomPage() {
     return `${y}-${m}-${d}`;
   };
 
-  const springSaturdayOptions = useMemo(() => {
-    // 明確指定要顯示的投票日期（YYYY-MM-DD）
-    return ["2026-06-20", "2026-06-21", "2026-06-28"];
-  }, []);
-
-  const initialVoteDate = springSaturdayOptions[0] || "";
+  const defaultVoteDates = useMemo(() => ["2026-06-20", "2026-06-21", "2026-06-28"], []);
+  const voteDateStorageKey = "vote-room-date-options-v1";
+  const [voteDateOptions, setVoteDateOptions] = useState<string[]>(defaultVoteDates);
+  const [newVoteDate, setNewVoteDate] = useState("");
   const [gameRows, setGameRows] = useState<GameInputRow[]>([createEmptyGameRow()]);
   const [currentVoteGames, setCurrentVoteGames] = useState<VoteGameOption[]>([]);
   const [selectedGameIds, setSelectedGameIds] = useState<string[]>([]);
   const [voterName, setVoterName] = useState("");
-  const [voteDates, setVoteDates] = useState<string[]>(initialVoteDate ? [initialVoteDate] : []);
+  const [voteDates, setVoteDates] = useState<string[]>([]);
   const [agreeVote, setAgreeVote] = useState(false);
   const [votes, setVotes] = useState<VoteRecord[]>([]);
   const [error, setError] = useState("");
@@ -89,7 +87,7 @@ export default function VoteRoomPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [editingVoterName, setEditingVoterName] = useState<string | null>(null);
   const [editingSelectedGames, setEditingSelectedGames] = useState<string[]>([]);
-  const [editingVoteDates, setEditingVoteDates] = useState<string[]>(initialVoteDate ? [initialVoteDate] : []);
+  const [editingVoteDates, setEditingVoteDates] = useState<string[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [deletingVoterName, setDeletingVoterName] = useState<string | null>(null);
 
@@ -145,6 +143,27 @@ export default function VoteRoomPage() {
       setError(e?.message || "讀取本次遊戲清單失敗");
     }
   };
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(voteDateStorageKey);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
+          const options = parsed.length ? parsed : defaultVoteDates;
+          setVoteDateOptions(options);
+          setVoteDates(options.length ? [options[0]] : []);
+          setEditingVoteDates(options.length ? [options[0]] : []);
+          return;
+        }
+      } catch {
+        // ignore invalid storage contents
+      }
+    }
+    setVoteDateOptions(defaultVoteDates);
+    setVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
+    setEditingVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
+  }, [defaultVoteDates]);
 
   useEffect(() => {
     void loadVotes();
@@ -235,6 +254,69 @@ export default function VoteRoomPage() {
     setEditingVoteDates((prev) =>
       prev.includes(date) ? prev.filter((item) => item !== date) : [...prev, date]
     );
+  };
+
+  const onAddVoteDateOption = () => {
+    const trimmed = newVoteDate.trim();
+    if (!trimmed) {
+      setError("請輸入要新增的日期");
+      return;
+    }
+
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(trimmed)) {
+      setError("日期格式需為 YYYY-MM-DD");
+      return;
+    }
+
+    if (voteDateOptions.includes(trimmed)) {
+      setError("此日期已存在");
+      return;
+    }
+
+    const nextDates = [...voteDateOptions, trimmed];
+    setVoteDateOptions(nextDates);
+    setNewVoteDate("");
+    setError("");
+    window.localStorage.setItem(voteDateStorageKey, JSON.stringify(nextDates));
+  };
+
+  const onSaveVoteDateOptions = () => {
+    try {
+      window.localStorage.setItem(voteDateStorageKey, JSON.stringify(voteDateOptions));
+      setSuccessMessage(`已儲存日期選項（共 ${voteDateOptions.length} 個）`);
+      setError("");
+      setTimeout(() => setSuccessMessage(""), 2500);
+    } catch (e: any) {
+      setError("儲存失敗");
+    }
+  };
+
+  const onResetVoteDateOptions = () => {
+    setVoteDateOptions(defaultVoteDates);
+    setVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
+    setEditingVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
+    try {
+      window.localStorage.setItem(voteDateStorageKey, JSON.stringify(defaultVoteDates));
+      setSuccessMessage("已重設為預設日期");
+      setError("");
+      setTimeout(() => setSuccessMessage(""), 2500);
+    } catch {
+      setError("重設失敗");
+    }
+  };
+
+  const onRemoveVoteDateOption = (date: string) => {
+    const nextDates = voteDateOptions.filter((item) => item !== date);
+    setVoteDateOptions(nextDates.length ? nextDates : defaultVoteDates);
+    if (!nextDates.length) {
+      setVoteDates(defaultVoteDates.length ? [defaultVoteDates[0]] : []);
+      window.localStorage.removeItem(voteDateStorageKey);
+    } else {
+      window.localStorage.setItem(voteDateStorageKey, JSON.stringify(nextDates));
+      setVoteDates((prev) => prev.filter((item) => nextDates.includes(item)));
+      setEditingVoteDates((prev) => prev.filter((item) => nextDates.includes(item)));
+    }
   };
 
   const onAddGameRow = () => {
@@ -408,9 +490,9 @@ export default function VoteRoomPage() {
       return;
     }
 
-    const hasInvalidDate = normalizedVoteDates.some((date) => !springSaturdayOptions.includes(date));
+    const hasInvalidDate = normalizedVoteDates.some((date) => !voteDateOptions.includes(date));
     if (hasInvalidDate) {
-      setError("投票日期僅能選擇 2026-06-20、2026-06-21 或 2026-06-28");
+      setError(`投票日期僅能選擇以下日期：${voteDateOptions.join("、")}`);
       return;
     }
 
@@ -467,7 +549,7 @@ export default function VoteRoomPage() {
       setSelectedGameIds([]);
       setVoterName("");
       setAgreeVote(false);
-      setVoteDates(initialVoteDate ? [initialVoteDate] : []);
+      setVoteDates(voteDateOptions.length ? [voteDateOptions[0]] : []);
       await loadVotes();
     } catch (e: any) {
       setError(e?.message || "投票失敗");
@@ -493,7 +575,7 @@ export default function VoteRoomPage() {
       setVotes([]);
       setVoterName("");
       setAgreeVote(false);
-      setVoteDates(initialVoteDate ? [initialVoteDate] : []);
+      setVoteDates(voteDateOptions.length ? [voteDateOptions[0]] : []);
     } catch (e: any) {
       setError(e?.message || "重新投票失敗");
     } finally {
@@ -506,13 +588,13 @@ export default function VoteRoomPage() {
     setSuccessMessage("");
     setEditingVoterName(summary.voterName);
     setEditingSelectedGames(summary.games);
-    setEditingVoteDates(summary.dates.length > 0 ? summary.dates : initialVoteDate ? [initialVoteDate] : []);
+    setEditingVoteDates(summary.dates.length > 0 ? summary.dates : voteDateOptions.length ? [voteDateOptions[0]] : []);
   };
 
   const onCancelEditVoter = () => {
     setEditingVoterName(null);
     setEditingSelectedGames([]);
-    setEditingVoteDates(initialVoteDate ? [initialVoteDate] : []);
+    setEditingVoteDates(voteDateOptions.length ? [voteDateOptions[0]] : []);
     setIsSavingEdit(false);
     setDeletingVoterName(null);
   };
@@ -552,8 +634,8 @@ export default function VoteRoomPage() {
       return;
     }
 
-    if (normalizedVoteDates.some((date) => !springSaturdayOptions.includes(date))) {
-      setError("投票日期僅能選擇 2026-06-20、2026-06-21 或 2026-06-28");
+    if (normalizedVoteDates.some((date) => !voteDateOptions.includes(date))) {
+      setError(`投票日期僅能選擇以下日期：${voteDateOptions.join("、")}`);
       return;
     }
 
@@ -693,17 +775,94 @@ export default function VoteRoomPage() {
 
         <section style={{ marginBottom: 24 }}>
           <h2 style={{ margin: "0 0 10px" }}>投票日期（可複選）</h2>
-          <div style={{ display: "grid", gap: 8 }}>
-            {springSaturdayOptions.map((date) => (
-              <label key={date} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  type="checkbox"
-                  checked={voteDates.includes(date)}
-                  onChange={() => onToggleVoteDate(date)}
-                />
-                {date}
-              </label>
-            ))}
+          <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                type="date"
+                value={newVoteDate}
+                onChange={(e) => setNewVoteDate(e.target.value)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #ccc",
+                  color: "#000",
+                  background: "#fff",
+                }}
+              />
+              <button
+                type="button"
+                onClick={onAddVoteDateOption}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "#1976d2",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                新增日期
+              </button>
+              <button
+                type="button"
+                onClick={onSaveVoteDateOptions}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "#2e7d32",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                儲存日期
+              </button>
+              <button
+                type="button"
+                onClick={onResetVoteDateOptions}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #ccc",
+                  background: "#fff",
+                  color: "#222",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                重設預設
+              </button>
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {voteDateOptions.map((date) => (
+                <label key={date} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={voteDates.includes(date)}
+                    onChange={() => onToggleVoteDate(date)}
+                  />
+                  <span>{date}</span>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveVoteDateOption(date)}
+                    style={{
+                      marginLeft: "auto",
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      border: "none",
+                      background: "#d32f2f",
+                      color: "#fff",
+                      cursor: "pointer",
+                      fontSize: 12,
+                    }}
+                  >
+                    刪除
+                  </button>
+                </label>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -1016,7 +1175,7 @@ export default function VoteRoomPage() {
                         </div>
                         <div style={{ display: "grid", gap: 8 }}>
                           <div>日期（可複選）</div>
-                          {springSaturdayOptions.map((date) => (
+                          {voteDateOptions.map((date) => (
                             <label key={date} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                               <input
                                 type="checkbox"

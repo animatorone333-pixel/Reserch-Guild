@@ -17,11 +17,8 @@ interface ExistingVoteRecord {
 
 const isValidDateString = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
-const isAllowed2026SpringSaturday = (value: string) => {
-  const [year, month, dayOfMonth] = value.split("-").map(Number);
-  if (year !== 2026 || ![3, 4].includes(month) || !dayOfMonth) return false;
-  const date = new Date(Date.UTC(year, month - 1, dayOfMonth));
-  return date.getUTCDay() === 6;
+const isAllowedVoteRoomDate = (value: string) => {
+  return isValidDateString(value);
 };
 
 const parseVoteDatesPayload = (value: unknown): string[] => {
@@ -161,9 +158,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (voteDates.some((date) => !isAllowed2026SpringSaturday(date))) {
+    if (voteDates.some((date) => !isAllowedVoteRoomDate(date))) {
       return NextResponse.json(
-        { success: false, error: "voteDates 僅允許 2026 年 3 月與 4 月的星期六" },
+        { success: false, error: "voteDates 僅允許 2026-06-20、2026-06-21 或 2026-06-28" },
         { status: 400 }
       );
     }
@@ -328,9 +325,9 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (voteDates.some((date) => !isAllowed2026SpringSaturday(date))) {
+    if (voteDates.some((date) => !isAllowedVoteRoomDate(date))) {
       return NextResponse.json(
-        { success: false, error: "投票日期僅允許 2026 年 3 月與 4 月的星期六" },
+        { success: false, error: "投票日期僅允許 2026-06-20、2026-06-21 或 2026-06-28" },
         { status: 400 }
       );
     }
