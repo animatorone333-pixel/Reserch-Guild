@@ -180,14 +180,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const allowedVoteDates = await fetchAllowedVoteRoomDates();
-    if (voteDates.some((date) => !allowedVoteDates.has(date))) {
-      return NextResponse.json(
-        { success: false, error: `voteDates 僅允許以下日期：${Array.from(allowedVoteDates).join("、")}` },
-        { status: 400 }
-      );
-    }
-
     const { data: existingVotes, error: existingVotesError } = await supabase
       .from("vote_room_votes")
       .select("id, vote_day, vote_days")
@@ -344,14 +336,6 @@ export async function PATCH(request: Request) {
     if (voteDates.some((date) => !isValidDateString(date))) {
       return NextResponse.json(
         { success: false, error: "voteDates 的日期格式需為 YYYY-MM-DD" },
-        { status: 400 }
-      );
-    }
-
-    const allowedVoteDates = await fetchAllowedVoteRoomDates();
-    if (voteDates.some((date) => !allowedVoteDates.has(date))) {
-      return NextResponse.json(
-        { success: false, error: `voteDates 僅允許以下日期：${Array.from(allowedVoteDates).join("、")}` },
         { status: 400 }
       );
     }
